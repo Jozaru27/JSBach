@@ -1,0 +1,16 @@
+#!/bin/bash
+
+source /usr/local/JSBach/conf/variables.conf
+
+FIFO=/tmp/f
+
+# Elimina FIFO si existe
+[ -p "$FIFO" ] && rm -f "$FIFO"
+
+# Crear FIFO
+mkfifo "$FIFO"
+
+# Ejecutar scr_cli correctamente
+while true; do
+    nc -lk 127.0.0.1 1234 < "$FIFO" | "$DIR/$PROJECTE/$DIR_SYSTEM/scr_cli" > "$FIFO"
+done

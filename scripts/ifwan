@@ -1,0 +1,170 @@
+#!/bin/bash
+
+source /usr/local/JSBach/conf/variables.conf
+source $DIR/$PROJECTE/$DIR_CONF/$CONF_IFWAN
+
+######################################################################
+###  Funcions
+######################################################################
+
+fnc_iniciar()
+{
+	ESTAT_ACTUAL=$(fnc_estat_solo)
+	if [ "$ESTAT_ACTUAL" == "$ACTIVAT" ]
+	then
+		echo "Ja está activa"
+		exit 1
+	fi
+	
+	case "$IFW_MODE" in
+	  "dhcp")
+	    dhcpcd $IFW_IFWAN
+	    ;;
+	  "manual")
+	    ip a a $IFW_IP/$IFW_MASC dev $IFW_IFWAN
+	    ip l s dev $IFW_IFWAN up
+	    ip r a default via $IFW_PE
+	    if grep "#DNS=" /etc/systemd/resolved.conf;
+	    then
+	    	sed -i 's/#DNS=/DNS='$IFW_S_DNS'/g' /etc/systemd/resolved.conf
+	    fi
+	    
+	    if ! grep "DNS=$IFW_S_DNS" /etc/systemd/resolved.conf;
+	    then
+	    	sed -i 's/^DNS=.*/DNS='$IFW_S_DNS'/g' /etc/systemd/resolved.conf
+	    fi
+	    systemctl restart systemd-resolved	
+	    ;; 
+	  *)
+	    echo "ERROR al iniciar o DHCP o manual"
+	    ;;
+	esac
+}
+
+fnc_aturar()
+{	
+	ESTAT_ACTUAL=$(fnc_estat_solo)
+	if [ "$ESTAT_ACTUAL" == "$DESACTIVAT" ]; then
+		echo "Ja està parada"
+		return 0
+	fi
+
+	case "$IFW_MODE" in
+	  "dhcp")
+	    dhcpcd -k $IFW_IFWAN
+	    ip link set dev $IFW_IFWAN down
+	    ;;
+	  "manual")
+	    ip a d $IFW_IP/$IFW_MASC dev $IFW_IFWAN 2>/dev/null
+	    ip link set dev $IFW_IFWAN down
+	    ;; 
+	  *)
+	    echo "ERROR al aturar o DHCP o manual"
+	    ;;
+	esac
+
+	echo "IFWAN parada"
+}
+
+
+fnc_estat_solo()
+{
+	if ip link show "$IFW_IFWAN" | grep -q "UP"; then
+	    echo "$ACTIVAT"
+	else
+	    echo "$DESACTIVAT"
+	fi
+}
+
+
+fnc_configurar()
+{	
+	if [[ "$1" == "mostrar" ]] then
+		echo $IFW_MODE $IFW_IFWAN $IFW_IP $IFW_MASC $IFW_PE $IFW_S_DNS
+	else
+		fnc_aturar	
+		(
+			echo IFW_MODE=$1 
+			echo IFW_IFWAN=$2
+			echo IFW_IP=$( echo $3 | cut -d'/' -f1 )
+			echo IFW_MASC=$( echo $3 | cut -d'/' -f2 )
+			echo IFW_PE=$4
+			echo IFW_S_DNS=$5
+		) >  $DIR/$PROJECTE/$DIR_CONF/$CONF_IFWAN
+		
+		echo "<br>"
+		echo "Configuracion guardada, tarjeta parada"
+	fi
+}
+
+# fnc_estat()
+# {	
+# 	if nslookup google.com > /dev/null 2>&1 ; then
+# 	    ESTAT="$ACTIVAT"
+# 		COLOR="green"
+# 	else
+# 	    ESTAT="$DESACTIVAT"
+# 		COLOR="red"
+# 	fi
+
+# 	if [[ "$IFW_MODE" == "manual" ]]; then
+# 	    IP_ACTUAL="$IFW_IP"
+# 	else
+# 	    IP_ACTUAL=$(ip -4 addr show dev "$IFW_IFWAN" | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n1)
+# 	fi
+
+# 	echo "Estado: <span style='color:$COLOR'>$ESTAT</span> | Tarjeta: $IFW_IFWAN | IP: $IP_ACTUAL"
+# }
+
+fnc_estat()
+{
+	if ip link show "$IFW_IFWAN" | grep -q "UP"; then
+		IP_ACTUAL=$(ip -4 addr show "$IFW_IFWAN" | awk '/inet /{print $2}' | cut -d/ -f1)
+
+		if [ -n "$IP_ACTUAL" ]; then
+			echo "<span style='color:green'>$ACTIVAT</span> | Tarjeta: $IFW_IFWAN | IP: $IP_ACTUAL"
+		else
+			echo "<span style='color:red'>$DESACTIVAT</span>  | Tarjeta: $IFW_IFWAN | IP: Sense IP"
+		fi
+	else
+		echo "<span style='color:red'>$DESACTIVAT</span> "
+	fi
+}
+
+
+
+######################################################################
+###  MAIN
+######################################################################
+
+MSG="falta [iniciar, aturar, configurar ,estat]"
+
+# Comprovem que hi hagi almenys un argument (la opció)
+if [ $# -lt 1 ]; then
+  echo "$MSG"
+  exit 1
+fi
+
+OPCIO_1=$1
+shift
+
+# Fem switch IFW_PEr executar la funció que toca
+case "$OPCIO_1" in
+  iniciar)
+    fnc_iniciar  $@
+    ;;
+  aturar)
+    fnc_aturar	$@
+    ;; 
+  configurar) 
+    fnc_configurar $@
+    ;;
+  estat) 
+    fnc_estat $@
+    ;;
+  *)
+    echo "$MSG"
+    ;;
+esac
+
+

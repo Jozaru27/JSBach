@@ -1,0 +1,12 @@
+#!/bin/bash
+
+while IFS= read -r linia
+do
+	if [[ $linia == 'final' ]]; then
+		break
+	fi
+		echo "$linia"
+        
+done < <((echo "$@" )| nc 127.0.0.1 1234)
+
+

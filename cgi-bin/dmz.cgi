@@ -1,0 +1,130 @@
+#!/bin/bash
+
+source /usr/local/JSBach/conf/variables.conf
+
+echo "Content-type: text/html; charset=utf-8"
+echo ""
+
+comand=$(echo "$QUERY_STRING" | sed -n 's/^.*comand=\([^&]*\).*$/\1/p')
+
+# Executar comanda
+OUTPUT=$("$DIR"/"$PROJECTE"/"$DIR_SCRIPTS"/client_srv_cli dmz $comand)
+
+# Determinar títol segons comanda
+case "$comand" in
+    iniciar)
+        TITLE="Iniciar DMZ"
+        ICON="🚀"
+        ;;
+    aturar)
+        TITLE="Aturar DMZ"
+        ICON="🛑"
+        ;;
+    estat)
+        TITLE="Estat de la DMZ"
+        ICON="📊"
+        ;;
+    *)
+        TITLE="DMZ"
+        ICON="🔐"
+        ;;
+esac
+
+cat << EOF
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+  <meta charset="utf-8">
+  <title>$TITLE - JSBach</title>
+  <style>
+body {
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+  padding: 2.5rem;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: #e2e8f0;
+  min-height: 100vh;
+}
+
+.container { max-width: 900px; margin: 0 auto; }
+
+h1 {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 20px 25px;
+  border-radius: 12px;
+  border-left: 4px solid #3b82f6;
+  margin-bottom: 30px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.card {
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  padding: 30px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(10px);
+}
+
+.card-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #60a5fa;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.terminal-output {
+  background: #020617;
+  color: #cbd5e1;
+  padding: 20px;
+  border-radius: 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
+}
+
+.badge {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  margin-bottom: 15px;
+}
+
+.badge-active { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+.badge-inactive { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.container { animation: fadeIn 0.4s ease-out; }
+
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1><span style="font-size: 1.8rem;">$ICON</span> $TITLE</h1>
+
+    <div class="card">
+      <div class="card-title">Resultat del Sistema DMZ</div>
+      <div class="terminal-output">
+$OUTPUT
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+EOF

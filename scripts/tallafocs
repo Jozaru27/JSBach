@@ -1,0 +1,427 @@
+#!/bin/bash
+
+source /usr/local/JSBach/conf/variables.conf
+
+######################################################################
+###  Funcions
+######################################################################
+
+fnc_iniciar()
+{
+	fnc_aturar > /dev/null 2>&1 
+	echo "Iniciant tallafocs"	
+		
+	
+	for linia in $(grep -v '#' "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF"); do
+	    nom=$(echo "$linia"|cut -d';' -f1)
+	    ip=$(echo "$linia"|cut -d';' -f3)
+	    iptables -N $nom
+	    iptables -A FORWARD -s $ip -j $nom	    
+	done
+	
+	iptables -N ports_wls
+	for linia in $(grep -v '#' "$DIR/$PROJECTE/$DIR_CONF/$PORTS_WLS"); do
+	    protocol=$(echo "$linia"|cut -d';' -f1)
+	    num_port=$(echo "$linia"|cut -d';' -f2)
+	    iptables -A ports_wls -p $protocol --dport $num_port -j ACCEPT	    
+	done
+	iptables -A ports_wls -j DROP
+	
+}
+
+fnc_aturar()
+{
+	echo "Aturar tallafocs"
+	iptables -F
+	iptables -X
+	iptables -P FORWARD ACCEPT
+	iptables -P INPUT ACCEPT
+	iptables -P OUTPUT ACCEPT
+	
+	
+	resultat=$($DIR/$PROJECTE/$DIR_SCRIPTS/enrutar estat)
+
+	# Comprovem si conté la paraula "ACTIVAT"
+	echo "$resultat" | grep -q "$ACTIVAT"
+
+	if [ $? -eq 0 ]; then
+		iptables -t nat -F 
+		iptables -t nat -X
+		$DIR/$PROJECTE/$DIR_SCRIPTS/enrutar iniciar > /dev/null 2>&1 
+	else
+		iptables -t nat -F 
+		iptables -t nat -X
+	fi	
+}
+
+fnc_configurar()
+{		
+    echo "Configuracio"
+    
+    ARG_1=$1    # Acción: desconnectar, connectar, connectar_port_wls, aillar_dmz, etc.
+    ARG_2=$2    # VID o VLAN (según la acción)
+    shift
+
+    case "$ARG_1" in
+        desconnectar)
+            linia=$(grep ";$ARG_2;" "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF")
+            nom=$(echo "$linia" | cut -d';' -f1)
+            if [ -z "$nom" ]; then
+                echo "Error: no existeix vlan VID=$ARG_2"
+            else
+                iptables -F "$nom"
+                # IPs privilegiadas
+                for ipwls in $(grep -v '#' "$DIR/$PROJECTE/$DIR_CONF/$IPS_WLS" | grep "^$ARG_2;"); do
+                    ip=$(echo "$ipwls" | cut -d';' -f2)
+                    mac=$(echo "$ipwls" | cut -d';' -f3)
+                    iptables -A "$nom" -s "$ip" -m mac --mac-source "$mac" -j ACCEPT
+                done
+                iptables -A "$nom" -j DROP
+            fi
+            ;;
+        connectar)
+            linia=$(grep ";$ARG_2;" "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF")
+            nom=$(echo "$linia" | cut -d';' -f1)
+            if [ -z "$nom" ]; then
+                echo "Error: no existeix vlan VID=$ARG_2"
+            else
+                iptables -F "$nom"
+            fi
+            ;;
+        connectar_port_wls)
+            linia=$(grep ";$ARG_2;" "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF")
+            nom=$(echo "$linia" | cut -d';' -f1)
+            if [ -z "$nom" ]; then
+                echo "Error: no existeix vlan VID=$ARG_2"
+            else
+                iptables -F "$nom"
+                # IPs privilegiadas
+                for ipwls in $(grep -v '#' "$DIR/$PROJECTE/$DIR_CONF/$IPS_WLS" | grep "^$ARG_2;"); do
+                    ip=$(echo "$ipwls" | cut -d';' -f2)
+                    mac=$(echo "$ipwls" | cut -d';' -f3)
+                    iptables -A "$nom" -s "$ip" -m mac --mac-source "$mac" -j ACCEPT
+                done
+                iptables -A "$nom" -j ports_wls
+            fi
+            ;;
+        aillar_dmz)
+            if [ -z "$ARG_2" ]; then
+                echo "Error: falta VLAN"
+                exit 1
+            fi
+            echo "Aïllant $ARG_2"
+            fnc_aillar_vlan "$ARG_2"
+            ;;
+        desaillar_dmz)
+            if [ -z "$ARG_2" ]; then
+                echo "Error: falta VLAN"
+                exit 1
+            fi
+            echo "Desaïllant $ARG_2"
+            fnc_desaillar_vlan "$ARG_2"
+            ;;
+        afegir_port_wls)
+            echo "$1;$2;" >> "$DIR/$PROJECTE/$DIR_CONF/$PORTS_WLS"
+            ;;
+        eliminar_port_wls)
+            PROTO="$1"
+            PORT="$2"
+            sed -i "/^${PROTO};${PORT};$/d" "$DIR/$PROJECTE/$DIR_CONF/$PORTS_WLS"
+            ;;  
+        afegir_ip_wls)
+            echo "$1;$2;$3;" >> "$DIR/$PROJECTE/$DIR_CONF/$IPS_WLS"
+            ;;
+        eliminar_ip_wls)
+            VID="$1"
+            IP="$2"
+            MAC="$3"
+            sed -i "/^${VID};${IP};${MAC};$/d" "$DIR/$PROJECTE/$DIR_CONF/$IPS_WLS"
+            ;;
+        input_desconnectar)
+            # Bloquejar input per a la VLAN
+            iptables -A INPUT -i "$ARG_2" -j DROP
+            ;;
+        input_connectar)
+            # Permetre input per a la VLAN (eliminar bloqueig)
+            iptables -D INPUT -i "$ARG_2" -j DROP 2>/dev/null
+            ;;
+        bloquejar_internet)
+            # Bloquejar accés al router des de la WAN
+            iptables -A INPUT -i enp6s0 -p icmp -j DROP
+            iptables -A INPUT -i enp6s0 -j DROP
+            ;;
+        desbloquejar_internet)
+            # Restaurar accés al router des de la WAN
+            iptables -D INPUT -i enp6s0 -p icmp -j DROP 2>/dev/null
+            iptables -D INPUT -i enp6s0 -j DROP 2>/dev/null
+            ;;
+        *)
+            echo "Error: arguments desconectar, connectar, connectar_port_wls, aillar_dmz, desaillar_dmz, input_connectar, input_desconnectar, bloquejar_internet, desbloquejar_internet"
+            ;;
+    esac
+}
+
+# fnc_configurar()
+# {		
+# 	echo "Configuracio"
+	
+# 	ARG_1=$1
+# 	ARG_2=$2
+# 	shift
+			
+# 	# Fem switch per executar la funció que toca
+# 	case "$ARG_1" in
+# 	  desconnectar)
+# 	        linia=$(cat "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF"| grep ";$1;" )
+# 	        nom=$( echo $linia | cut -d';' -f1)
+# 	        vid=$( echo $linia | cut -d';' -f2)
+# 	        if [ -z "$nom" ]; then
+# 		    echo "Error no existeix vlan $1"
+# 		else
+# 		    iptables -F $nom
+# 		        # IPs privilegiades
+# 		     	for ipwls in $(grep -v '#' "$DIR/$PROJECTE/$DIR_CONF/$IPS_WLS"| grep "^$vid;"); do
+# 			    ip=$(echo "$ipwls"|cut -d';' -f2)
+# 			    mac=$(echo "$ipwls"|cut -d';' -f3)
+# 			    iptables -A $nom   -s $ip -m mac --mac-source $mac -j ACCEPT 
+# 			done
+
+# 		    iptables -A $nom -j DROP
+# 		fi
+# 	  	;;
+# 	  connectar)
+# 	        linia=$(cat "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF"| grep ";$1;" )
+# 	        nom=$( echo $linia | cut -d';' -f1)
+# 	        if [ -z "$nom" ]; then
+# 		    	echo "Error no existeix vlan $1"
+# 		else
+# 			iptables -F $nom
+# 		fi	        
+# 	  	;;
+#           connectar_port_wls)
+# 	        linia=$(cat "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF"| grep ";$1;" )
+# 	        nom=$( echo $linia | cut -d';' -f1)
+# 	        vid=$( echo $linia | cut -d';' -f2)
+# 	        if [ -z "$nom" ]; then
+# 		    	echo "Error no existeix vlan $1"
+# 		else
+# 			iptables -F $nom
+# 		 	# IPs privilegiades
+# 			for ipwls in $(grep -v '#' "$DIR/$PROJECTE/$DIR_CONF/$IPS_WLS"| grep "^$vid;"); do
+# 			    ip=$(echo "$ipwls"|cut -d';' -f2)
+# 			    mac=$(echo "$ipwls"|cut -d';' -f3)
+# 			    iptables -A $nom   -s $ip -m mac --mac-source $mac -j ACCEPT 
+# 			done
+			
+# 			iptables -A $nom -j ports_wls
+			
+# 		fi	        
+# 	  	;;
+# 	  afegir_port_wls)
+# 	  	echo "$1;$2;" >> "$DIR/$PROJECTE/$DIR_CONF/$PORTS_WLS"
+# 	        ;;
+# 	  eliminar_port_wls)
+# 	        PROTO="$1"
+# 		PORT="$2"
+# 		sed -i "/^${PROTO};${PORT};$/d" "$DIR/$PROJECTE/$DIR_CONF/$PORTS_WLS"
+# 	        ;;  
+# 	  afegir_ip_wls)
+# 	  	echo "$1;$2;$3;" >> "$DIR/$PROJECTE/$DIR_CONF/$IPS_WLS"
+# 	        ;;
+# 	  eliminar_ip_wls)
+# 	        VID="$1"
+# 		IP="$2"
+# 		MAC="$3"
+# 		sed -i "/^${VID};${IP};${MAC};$/d" "$DIR/$PROJECTE/$DIR_CONF/$IPS_WLS"
+# 	        ;;
+# 	# aillar_dmz)
+# 	# 	VLAN_IF="$1"
+# 	# 	[ -z "$VLAN_IF" ] && echo "Error: falta VLAN" && exit 1
+
+# 	# 	echo "Aïllant $VLAN_IF"
+
+# 	# 	# Limpieza previa
+# 	# 	iptables -D FORWARD -o $VLAN_IF -m conntrack --ctstate NEW -j DROP 2>/dev/null
+# 	# 	iptables -D FORWARD -o $VLAN_IF -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null
+# 	# 	iptables -D FORWARD -i $VLAN_IF -m conntrack --ctstate NEW,ESTABLISHED,RELATED -j ACCEPT 2>/dev/null
+
+# 	# 	# Aislamiento
+# 	# 	iptables -A FORWARD -i $VLAN_IF -m conntrack --ctstate NEW,ESTABLISHED,RELATED -j ACCEPT
+# 	# 	iptables -A FORWARD -o $VLAN_IF -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+# 	# 	iptables -A FORWARD -o $VLAN_IF -m conntrack --ctstate NEW -j DROP
+# 	# ;;
+# 	# desaillar_dmz)
+# 	# 	VLAN_IF="$1"
+# 	# 	[ -z "$VLAN_IF" ] && echo "Error: falta VLAN" && exit 1
+
+# 	# 	echo "Desaïllant $VLAN_IF"
+
+# 	# 	iptables -D FORWARD -o $VLAN_IF -m conntrack --ctstate NEW -j DROP 2>/dev/null
+# 	# 	iptables -D FORWARD -o $VLAN_IF -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null
+# 	# 	iptables -D FORWARD -i $VLAN_IF -m conntrack --ctstate NEW,ESTABLISHED,RELATED -j ACCEPT 2>/dev/null
+# 	# ;;
+
+
+# 	#   *)
+# 	#         echo "Error  arguments conectar, desconectar"
+# 	#         ;;
+# 	    aillar_dmz)
+#             if [ -z "$ARG_2" ]; then
+#                 echo "Error: falta VLAN"
+#                 exit 1
+#             fi
+#             echo "Aïllant $ARG_2"
+#             fnc_aillar_vlan "$ARG_2"
+#             ;;
+#         desaillar_dmz)
+#             if [ -z "$ARG_2" ]; then
+#                 echo "Error: falta VLAN"
+#                 exit 1
+#             fi
+#             echo "Desaïllant $ARG_2"
+#             fnc_desaillar_vlan "$ARG_2"
+#             ;;
+#         *)
+#             echo "Error: arguments desconectar, connectar, connectar_port_wls, aillar_dmz, desaillar_dmz"
+#             ;;
+# 	esac	
+	
+# }
+
+
+fnc_estat()
+{	
+	if [ $# -eq 0 ]; then
+		 # Comprovem si hi ha regles o cadenes personalitzades per determinar si està actiu
+		 if iptables -L ports_wls -n >/dev/null 2>&1; then
+		     echo "$ACTIVAT"
+		 else
+		     echo "$DESACTIVAT"
+		 fi
+		 
+		 echo "MAIN"
+		 iptables -nvL --line-numbers
+		 echo
+		 echo
+		 echo "NAT"
+		 iptables -t nat -nvL --line-numbers
+		 exit 0
+	fi
+	
+	        linia=$(cat "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF"| grep ";$1;" )
+	        nom=$( echo $linia | cut -d';' -f1)
+	        if [ -z "$nom" ]; then
+		    echo "Error no existeix vlan $1"
+		else
+		        # Detecció d'estat aïllat (stateful o stateless)
+		        if iptables -C FORWARD -i "$1" -o enp6s0 -m conntrack --ctstate NEW -j DROP 2>/dev/null || \
+		           iptables -C FORWARD -i "$1" -o enp6s0 -j DROP 2>/dev/null || \
+		           iptables -C FORWARD -i "$1" -p icmp -j DROP 2>/dev/null; then
+		            echo "AÏLLADA"
+		        elif iptables -C $nom -j DROP 2>/dev/null; then
+			    echo "DESCONNECTADA"
+			else
+			    if iptables -C $nom -j ports_wls  2>/dev/null; then
+				echo "CONNECTADA PORT WLS"
+			    else
+			    	echo "CONNECTADA"
+			    fi
+			fi 
+		fi
+}
+
+fnc_aillar_vlan() {
+    VLAN_IF="$1"
+    [ -z "$VLAN_IF" ] && echo "Error: falta VLAN" && return 1
+
+    echo "Aïllant $VLAN_IF"
+
+    if [ "$VLAN_IF" == "1" ]; then
+        # Admin: Internet ON, Ping OFF (Stateless is fine here)
+        iptables -A FORWARD -i "$VLAN_IF" -p icmp -j DROP
+    else
+        # Altres: Internet OFF (Stateful: Bloquejar NOMÉS noves connexions a la WAN)
+        # Això permet que el trànsit establert (si n'hi hagués) no es talli bruscament, 
+        # però cap dispositiu pot iniciar res nou cap a internet.
+        iptables -A FORWARD -i "$VLAN_IF" -o enp6s0 -m conntrack --ctstate NEW -j DROP
+    fi
+}
+
+fnc_desaillar_vlan() {
+    VLAN_IF="$1"
+    [ -z "$VLAN_IF" ] && echo "Error: falta VLAN" && return 1
+
+    echo "Desaïllant $VLAN_IF"
+
+    # Intentar eliminar totes les variants possibles
+    iptables -D FORWARD -i "$VLAN_IF" -o enp6s0 -m conntrack --ctstate NEW -j DROP 2>/dev/null
+    iptables -D FORWARD -i "$VLAN_IF" -o enp6s0 -j DROP 2>/dev/null
+    iptables -D FORWARD -i "$VLAN_IF" -p icmp -j DROP 2>/dev/null
+}
+
+fnc_estat_wan() {
+    # Comprovar si hi ha bloqueig a la WAN (enp6s0)
+    if iptables -C INPUT -i enp6s0 -j DROP 2>/dev/null; then
+        echo "BLOCKED"
+    else
+        echo "OPEN"
+    fi
+}
+
+fnc_estat_input() {
+    # Comprovar si hi ha bloqueig per a una interfície de VLAN
+    if [ -z "$1" ]; then
+        echo "Error: falta VLAN"
+        return 1
+    fi
+    if iptables -C INPUT -i "$1" -j DROP 2>/dev/null; then
+        echo "DESCONNECTADA"
+    else
+        echo "CONNECTADA"
+    fi
+}
+
+
+
+
+######################################################################
+###  MAIN
+######################################################################
+
+MSG="falta [iniciar, aturar, configurar ,estat]"
+
+# Comprovem que hi hagi almenys un argument (la opció)
+if [ $# -lt 1 ]; then
+  echo "$MSG"
+  exit 1
+fi
+
+OPCIO_1=$1
+shift
+
+# Fem switch per executar la funció que toca
+case "$OPCIO_1" in
+  iniciar)
+    fnc_iniciar  $@
+    ;;
+  aturar)
+    fnc_aturar	$@
+    ;; 
+  configurar) 
+    fnc_configurar $@
+    ;;
+  estat) 
+    fnc_estat $@
+    ;;
+  estat_wan)
+    fnc_estat_wan $@
+    ;;
+  estat_input)
+    fnc_estat_input $@
+    ;;
+  *)
+    echo "$MSG"
+    ;;
+esac
+
+

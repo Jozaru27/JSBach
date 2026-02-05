@@ -1,0 +1,107 @@
+#!/bin/bash
+
+source /usr/local/JSBach/conf/variables.conf
+source $DIR/$PROJECTE/$DIR_CONF/$CONF_IFWAN
+
+######################################################################
+### Funcions
+######################################################################
+
+# Comprueba solo el estado del enrutamiento
+fnc_estat_solo()
+{
+    if [ "$(cat /proc/sys/net/ipv4/ip_forward)" -eq 1 ] && \
+       iptables -t nat -C POSTROUTING -o "$IFW_IFWAN" -j MASQUERADE 2>/dev/null
+    then
+        echo "$ACTIVAT"
+    else
+        echo "$DESACTIVAT"
+    fi
+}
+
+# Comprobar si la WAN está UP
+fnc_wan_activa()
+{
+    if ip link show "$IFW_IFWAN" | grep -q "UP"; then
+        echo "$ACTIVAT"
+    else
+        echo "$DESACTIVAT"
+    fi
+}
+
+fnc_iniciar()
+{
+    WAN_ESTADO=$(fnc_wan_activa)
+    if [ "$WAN_ESTADO" != "$ACTIVAT" ]; then
+        echo "<span style='color:red'>No es pot activar l'enrutament: la WAN està parada</span>"
+        return 0
+    fi
+
+    ESTAT_ACTUAL=$(fnc_estat_solo)
+    if [ "$ESTAT_ACTUAL" == "$ACTIVAT" ]; then
+        echo "<span style='color:green'>Ja està activat</span>"
+        return 0
+    fi
+
+    echo 1 > /proc/sys/net/ipv4/ip_forward
+    iptables -t nat -A POSTROUTING -o "$IFW_IFWAN" -j MASQUERADE
+
+    echo "<span style='color:green'>Enrutament activat correctament</span>"
+}
+
+fnc_aturar()
+{
+    ESTAT_ACTUAL=$(fnc_estat_solo)
+    if [ "$ESTAT_ACTUAL" == "$DESACTIVAT" ]; then
+        echo "<span style='color:red'>Ja està aturat</span>"
+        return 0
+    fi
+
+    echo 0 > /proc/sys/net/ipv4/ip_forward
+    iptables -t nat -D POSTROUTING -o "$IFW_IFWAN" -j MASQUERADE
+
+    echo "<span style='color:red'>Enrutament aturat correctament</span>"
+}
+
+fnc_estat()
+{
+    ESTAT_ACTUAL=$(fnc_estat_solo)
+    WAN_ESTADO=$(fnc_wan_activa)
+
+    if [ "$ESTAT_ACTUAL" == "$ACTIVAT" ] && [ "$WAN_ESTADO" == "$ACTIVAT" ]; then
+        echo "<span style='color:green'>Enrutament activat | Interfície: $IFW_IFWAN</span>"
+    elif [ "$ESTAT_ACTUAL" == "$DESACTIVAT" ]; then
+        echo "<span style='color:red'>Enrutament aturat</span>"
+    else
+        echo "<span style='color:orange'>Enrutament parcial: WAN parada o activació pendent</span>"
+    fi
+}
+
+######################################################################
+### MAIN
+######################################################################
+
+MSG="falta [iniciar, aturar, estat]"
+
+if [ $# -lt 1 ]; then
+    echo "$MSG"
+    exit 1
+fi
+
+OPCIO_1=$1
+shift
+
+case "$OPCIO_1" in
+    iniciar)
+        fnc_iniciar $@
+        ;;
+    aturar)
+        fnc_aturar $@
+        ;;
+    estat)
+        fnc_estat $@
+        ;;
+    *)
+        echo "$MSG"
+        ;;
+esac

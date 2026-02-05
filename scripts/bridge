@@ -1,0 +1,585 @@
+#!/bin/bash
+
+source /usr/local/JSBach/conf/variables.conf
+
+guardar_permisos(){
+    local FILE="$1"
+    PERMS=$(stat -c %a "$FILE")
+    OWNER=$(stat -c %u "$FILE")
+    GROUP=$(stat -c %g "$FILE")
+}
+
+restaurar_permisos(){
+    local FILE="$1"
+    chown "$OWNER:$GROUP" "$FILE"
+    chmod "$PERMS" "$FILE"
+}
+
+fnc_iniciar()
+{
+    echo "Iniciar"
+    if ip link show br0 &>/dev/null; then
+        echo "<span style='color:green'>Ja està activat</span>"
+        return 0
+    fi
+    ip l a name br0 type bridge vlan_filtering 1
+    ip l s dev br0 up
+    for LINIA in $(grep -v '^#' "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF"); do
+        VLANID=$(echo "$LINIA"|cut -d';' -f2)
+        VLANIP=$(echo "$LINIA"|cut -d';' -f4)
+        ip l a l br0 name br0.$VLANID type vlan id $VLANID
+        ip l s dev br0.$VLANID up
+        ip a a dev br0.$VLANID $VLANIP
+    done
+    bridge vlan del dev br0 vid 1 pvid untagged self
+    for LINIA in $(grep -v '^#' "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_IF"); do
+        NOM_IF=$(echo "$LINIA"|cut -d';' -f1)
+        VLAN_UNTAG=$(echo "$LINIA"|cut -d';' -f2)
+        VLAN_TAG=$(echo "$LINIA"|cut -d';' -f3)
+        ip l s dev $NOM_IF master br0
+        ip l s dev $NOM_IF up
+        bridge vlan del dev $NOM_IF vid 1 pvid untagged
+        if [ "$VLAN_UNTAG" != "0" ]; then
+            bridge vlan add dev $NOM_IF vid $VLAN_UNTAG pvid untagged
+            bridge vlan add dev br0 vid $VLAN_UNTAG self
+        fi
+        if [ "$VLAN_TAG" != "0" ]; then
+            for CAMP in ${VLAN_TAG//,/ }; do
+                bridge vlan add dev $NOM_IF vid $CAMP
+                bridge vlan add dev br0 vid $CAMP self
+            done
+        fi
+    done
+}
+
+fnc_aturar()
+{
+    if ! ip link show br0 &>/dev/null; then
+        echo "<span style='color:red'>Ja està aturat</span>"
+        return 0
+    fi
+    echo "Aturar"
+    ip l d dev br0
+}
+
+fnc_configurar()
+{
+    if [ $# -lt 1 ]; then
+        echo "falta mostrar, guardar, esborrar"
+        exit 
+    fi
+
+    ARG_1=$1
+    shift
+
+    case "$ARG_1" in
+        mostrar)
+            if [ "$1" == "vlan" ]; then
+                if [ -s "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF" ]; then
+                    grep -v '^#' "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF"
+                else
+                    echo "Encara no hi ha VLAN configurades"
+                fi
+            fi
+            if [ "$1" == "bridge" ]; then
+                grep -v '^#' "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_IF"
+            fi
+            ;;
+        guardar)
+            OPCIO_2=$1
+            shift
+
+            case "$OPCIO_2" in
+                vlan)
+                    if [ $# -lt 4 ]; then
+                        echo "Falta: Nom VID Subxarxa Gateway"
+                        exit 1
+                    fi
+
+                    NOM=$1
+                    VID=$2
+                    SUBX=$3
+                    GW=$4
+
+                guardar_permisos "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF"
+
+				TMP_FILE=$(mktemp)
+				MODIFICADA=0
+
+				while IFS= read -r LINEA || [ -n "$LINEA" ]; do
+					if [[ "$LINEA" =~ ^# ]] || [[ -z "$LINEA" ]]; then
+						echo "$LINEA" >> "$TMP_FILE"
+						continue
+					fi
+
+					LINEA_VID=$(echo "$LINEA" | cut -d';' -f2)
+					if [ "$LINEA_VID" = "$VID" ]; then
+						CATEGORIA=$(echo "$LINEA" | cut -d';' -f5)
+						echo "$NOM;$VID;$SUBX;$GW;$CATEGORIA" >> "$TMP_FILE"
+						MODIFICADA=1
+					else
+						echo "$LINEA" >> "$TMP_FILE"
+					fi
+				done < "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF"
+
+				if [ $MODIFICADA -eq 0 ]; then
+					echo "$NOM;$VID;$SUBX;$GW;" >> "$TMP_FILE"
+				fi
+
+				mv "$TMP_FILE" "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF"
+                # chmod 644 "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF"
+
+                restaurar_permisos "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF"
+
+                    ;;
+                bridge)
+                    if [ "$#" -lt "3" ]; then
+                        echo "falta nom_interfaç vid_untag (0 si no) vids-tag (0 si no)"
+                        exit
+                    fi
+
+                    guardar_permisos "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_IF"
+
+                    RESULTAT=$(grep -v "$1;" "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_IF")
+                    echo "$RESULTAT" > "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_IF"
+                    echo "$1;$2;$3;" >> "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_IF"
+
+                    restaurar_permisos "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_IF"
+
+                    ;;
+                *)
+                    echo "Error"
+                    exit 1
+                    ;;
+            esac
+            ;;
+        esborrar)
+            if [ "$1" == "vlan" ]; then
+                if [ "$2" -lt 3 ]; then
+                    echo "no es pot esborrar la vlan $2"
+                    exit 1
+                fi
+
+                guardar_permisos "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF"
+                
+                RESULTAT=$(grep -v ";$2;" "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF")
+                echo "$RESULTAT" > "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF"
+                echo "$RESULTAT"
+
+                restaurar_permisos "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF"
+
+            fi
+            ;;
+        *)
+            echo "Error"
+            ;;
+    esac
+}
+
+fnc_estat()
+{
+    if ip link show br0 &>/dev/null; then
+        echo "$ACTIVAT"
+        echo "<h2>Estat del Bridge</h2>"
+        echo "<div style='margin-bottom: 20px; font-size: 1.1em;'>Estat General: <span class='badge badge-green'>ACTIVAT</span></div>"
+
+        # --- VLAN IP Configuration ---
+        echo "<h3>Configuració de Xarxa (VLANs & IPs)</h3>"
+        echo "<table>"
+        echo "<thead><tr><th>VLAN ID</th><th>Interfície</th><th>Estat & IP</th></tr></thead>"
+        echo "<tbody>"
+        
+        found_vlans=0
+        if [ -f "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF" ]; then
+            while IFS= read -r LINIA; do
+                if [[ "$LINIA" =~ ^# ]] || [[ -z "$LINIA" ]]; then continue; fi
+                
+                VLANID=$(echo "$LINIA"|cut -d';' -f2)
+                # echo "$LINIA"|cut -d';' -f4 is IP, but we can get real status from ip command
+                
+                IP_OUTPUT=$(ip -4 -br a show dev br0.$VLANID 2>/dev/null)
+                if [ -z "$IP_OUTPUT" ]; then
+                    IP_STATUS="<span style='color: #94a3b8;'>No activa</span>"
+                else
+                    # Format: br0.10 UP 192.168.10.1/24 ...
+                    STATE=$(echo "$IP_OUTPUT" | awk '{print $2}')
+                    IP_ADDR=$(echo "$IP_OUTPUT" | awk '{print $3}')
+                    if [ "$STATE" == "UP" ]; then
+                         STATE_BADGE="<span class='badge badge-green'>UP</span>"
+                    else
+                         STATE_BADGE="<span class='badge badge-red'>$STATE</span>"
+                    fi
+                    IP_STATUS="$STATE_BADGE $IP_ADDR"
+                fi
+                
+                echo "<tr><td>$VLANID</td><td>br0.$VLANID</td><td>$IP_STATUS</td></tr>"
+                found_vlans=1
+            done < "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF"
+        fi
+        
+        if [ "$found_vlans" -eq 0 ]; then
+            echo "<tr><td colspan='3' style='text-align:center;'>Cap VLAN configurada</td></tr>"
+        fi
+        echo "</tbody></table>"
+
+        # --- Port Assignments ---
+        echo "<h3>Assignació de Ports (Tag/Untag)</h3>"
+        echo "<div style='background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; font-family: monospace; border: 1px solid rgba(255,255,255,0.05); overflow-x: auto;'>"
+        # Parse bridge vlan show to make it prettier could be hard, raw output is honest but ugly.
+        # Let's clean it up slightly
+        bridge vlan show | sed 's/^/  /' 
+        echo "</div>"
+
+        # --- Ebtables Isolation Status ---
+        echo "<h3>Estat Ebtables i Aïllament</h3>"
+        echo "<table>"
+        echo "<thead><tr><th>VLAN</th><th>Estat Aïllament</th><th>Interfícies Afectades</th><th>Regles Ebtables Aplicades</th></tr></thead>"
+        echo "<tbody>"
+
+        # Get all current FORWARD rules once to avoid calling ebtables many times
+        CURRENT_RULES=$(ebtables -L FORWARD 2>/dev/null)
+
+        if [ -f "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF" ]; then
+            while IFS= read -r LINIA; do
+                if [[ "$LINIA" =~ ^# ]] || [[ -z "$LINIA" ]]; then continue; fi
+
+                NOM=$(echo "$LINIA" | cut -d';' -f1)
+                VLANID=$(echo "$LINIA" | cut -d';' -f2)
+
+                # Get interfaces that are UNTAGGED for this VLAN (usually what we isolate)
+                # Reading BRIDGE_IF: Interface;Untag;Tag;...
+                IFACES=()
+                # Array associatiu per guardar TIPUS (UNTAG/TAG) de cada interfície
+                declare -A IFACE_TYPE
+
+                if [ -f "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_IF" ]; then
+                     while IFS=';' read -r IFACE UNTAG TAG RESTO; do
+                        if [[ "$IFACE" =~ ^# ]]; then continue; fi
+                        
+                        IS_TARGET=0
+                        if [ "$UNTAG" == "$VLANID" ]; then
+                            IS_TARGET=1
+                            IFACE_TYPE["$IFACE"]="UNTAG"
+                        else
+                             for t in ${TAG//,/ }; do
+                                if [ "$t" == "$VLANID" ]; then
+                                    IS_TARGET=1
+                                    IFACE_TYPE["$IFACE"]="TAG"
+                                    break
+                                fi
+                             done
+                        fi
+
+                        if [ "$IS_TARGET" -eq 1 ]; then
+                            IFACES+=("$IFACE")
+                        fi
+                     done < "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_IF"
+                fi
+                
+                IFACES_STR="${IFACES[*]}"
+                IFACES_DISPLAY=""
+                for i in "${IFACES[@]}"; do
+                    if [ "${IFACE_TYPE[$i]}" == "TAG" ]; then
+                        IFACES_DISPLAY="$IFACES_DISPLAY $i(T)"
+                    else
+                        IFACES_DISPLAY="$IFACES_DISPLAY $i(U)"
+                    fi
+                done
+
+                # Check for rules related to these interfaces
+                RULES_HTML=""
+                IS_ISOLATED=0
+                
+                if [ ${#IFACES[@]} -gt 0 ]; then
+                    for iface in "${IFACES[@]}"; do
+                        # Find rules where this interface is source or destination and DROP is target
+                        # Simplified check: just grep the interface in the rules dump
+                        # Improve: Check for specific DROP rules
+                        
+                        # We look for lines containing "-i $iface ... -j DROP" or "-o $iface ... -j DROP"
+                        MATCHING_RULES=$(echo "$CURRENT_RULES" | grep -F "$iface" | grep "DROP")
+                        
+                        if [ -n "$MATCHING_RULES" ]; then
+                            IS_ISOLATED=1
+                            while read -r rule_line; do
+                                # Clean up rule line logic if needed
+                                RULES_HTML="$RULES_HTML<div style='margin-bottom:4px; font-family:monospace; font-size:0.9em; color:#e2e8f0; background:rgba(0,0,0,0.2); padding:2px 6px; border-radius:4px;'>$rule_line</div>"
+                            done <<< "$MATCHING_RULES"
+                        fi
+                        
+                        # Also check ACCEPT rules strictly if we care, but DROP is the key for "Isolation" concept here.
+                        # User wants applied rules generally. Let's add ACCEPT rules too but visually distinct? 
+                        # User asked "applied or not applied".
+                        MATCHING_ACCEPT=$(echo "$CURRENT_RULES" | grep -F "$iface" | grep "ACCEPT")
+                         if [ -n "$MATCHING_ACCEPT" ]; then
+                            while read -r rule_line; do
+                                RULES_HTML="$RULES_HTML<div style='margin-bottom:4px; font-family:monospace; font-size:0.9em; color:#86efac; background:rgba(0,0,0,0.2); padding:2px 6px; border-radius:4px;'>$rule_line</div>"
+                            done <<< "$MATCHING_ACCEPT"
+                        fi
+                    done
+                fi
+
+                if [ "$IS_ISOLATED" -eq 1 ]; then
+                    STATUS_BADGE="<span class='badge badge-red'>AÏLLAT</span>"
+                else
+                    if [ ${#IFACES[@]} -lt 2 ]; then
+                         STATUS_BADGE="<span class='badge badge-blue'>N/A (< 2 Ifaces)</span>"
+                    else
+                         STATUS_BADGE="<span class='badge badge-green'>NO AÏLLAT</span>"
+                    fi
+                fi
+                
+                if [ -z "$RULES_HTML" ]; then RULES_HTML="<span style='color: #64748b; font-style: italic;'>Cap regla específica</span>"; fi
+
+                echo "<tr>"
+                echo "<td><strong>$NOM</strong> (ID: $VLANID)</td>"
+                echo "<td>$STATUS_BADGE</td>"
+                echo "<td>$IFACES_DISPLAY</td>"
+                echo "<td>$RULES_HTML</td>"
+                echo "</tr>"
+
+            done < "$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_CONF"
+        fi
+        echo "</tbody></table>"
+
+    else
+        echo "$DESACTIVAT"
+        echo "<div style='margin-bottom: 20px; font-size: 1.1em;'>Estat General: <span class='badge badge-red'>DESACTIVAT</span></div>"
+        echo "<p>El bridge no està actiu. Inicieu el bridge per veure més detalls.</p>"
+    fi
+}
+
+fnc_aplicar_ebtables() {
+    VLAN_ID="$1"
+    if [ -z "$VLAN_ID" ]; then echo "Error: Falta VLAN ID"; return 1; fi
+    
+    # Interfaz del gateway / salida a Internet (Deberia ser configurable, pero mantenemos hardcode por ahora o leemos de alguna conf)
+    GATEWAY_IF="enp6s0" 
+
+    local CONF_FILE="$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_IF"
+
+    # Leer interfaces UNTAG y TAG para esta VLAN
+    IFACES=()
+    declare -A IFACE_TYPE
+
+    while IFS=';' read -r IFACE UNTAG TAG RESTO; do
+        if [[ "$IFACE" =~ ^# ]]; then continue; fi
+        
+        IS_TARGET=0
+        if [ "$UNTAG" == "$VLAN_ID" ]; then
+            IS_TARGET=1
+            IFACE_TYPE["$IFACE"]="UNTAG"
+        else
+                for t in ${TAG//,/ }; do
+                if [ "$t" == "$VLAN_ID" ]; then
+                    IS_TARGET=1
+                    IFACE_TYPE["$IFACE"]="TAG"
+                    break
+                fi
+                done
+        fi
+
+        if [ "$IS_TARGET" -eq 1 ]; then
+            IFACES+=("$IFACE")
+        fi
+    done < "$CONF_FILE"
+
+    if [ ${#IFACES[@]} -lt 2 ]; then
+        echo "Menos de 2 interfaces en VLAN $VLAN_ID, nada que aislar."
+        return 0
+    fi
+
+    # Asegurar que las reglas no estan duplicadas antes de añadir?
+    # Por simplicidad, primero intentamos borrar por si acaso, para evitar duplicados limpios
+    fnc_esborrar_ebtables "$VLAN_ID" > /dev/null 2>&1
+
+    echo "Aplicando reglas para VLAN $VLAN_ID (${IFACES[*]})"
+
+    # Aplicar reglas por cada interfaz de la VLAN
+    for i in "${IFACES[@]}"; do
+        if [ "${IFACE_TYPE[$i]}" == "TAG" ]; then
+            # Para TAGGED: No especificamos -i, solo matcheamos por VLAN ID
+            # Esto hace la regla más genérica y eficiente
+            
+            # 1. PERMITIR salida hacia el GATEWAY
+            CMD="ebtables -A FORWARD -p 802_1Q --vlan-id $VLAN_ID -o $GATEWAY_IF -j ACCEPT"
+            eval $CMD
+            
+            # 2. DENEGAR todo lo demás de esta VLAN
+            CMD="ebtables -A FORWARD -p 802_1Q --vlan-id $VLAN_ID -j DROP"
+            eval $CMD
+        else
+            # Para UNTAGGED: Especificamos -i porque no hay VLAN tag que matchear
+            
+            # 1. PERMITIR salida hacia el GATEWAY
+            CMD="ebtables -A FORWARD -i $i -o $GATEWAY_IF -j ACCEPT"
+            eval $CMD
+            
+            # 2. DENEGAR todo lo demás
+            CMD="ebtables -A FORWARD -i $i -j DROP"
+            eval $CMD
+        fi
+    done
+
+    echo "Reglas aplicadas para VLAN $VLAN_ID."
+}
+
+fnc_esborrar_ebtables() {
+    VLAN_ID="$1"
+    if [ -z "$VLAN_ID" ]; then echo "Error: Falta VLAN ID"; return 1; fi
+
+    GATEWAY_IF="enp6s0"
+    local CONF_FILE="$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_IF"
+    
+    local CONF_FILE="$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_IF"
+    
+    # Leer interfaces UNTAG y TAG para esta VLAN (misma logica para borrarlas todas)
+    IFACES=()
+    declare -A IFACE_TYPE
+
+    while IFS=';' read -r IFACE UNTAG TAG RESTO; do
+        if [[ "$IFACE" =~ ^# ]]; then continue; fi
+        IS_TARGET=0
+        if [ "$UNTAG" == "$VLAN_ID" ]; then
+            IS_TARGET=1
+            IFACE_TYPE["$IFACE"]="UNTAG"
+        else
+             for t in ${TAG//,/ }; do
+                if [ "$t" == "$VLAN_ID" ]; then
+                    IS_TARGET=1
+                    IFACE_TYPE["$IFACE"]="TAG"
+                    break
+                fi
+             done
+        fi
+        if [ "$IS_TARGET" -eq 1 ]; then
+            IFACES+=("$IFACE")
+        fi
+    done < "$CONF_FILE"
+
+    echo "Eliminando reglas para VLAN $VLAN_ID (${IFACES[*]})"
+
+    # Eliminar reglas por cada interfaz de la VLAN
+    for i in "${IFACES[@]}"; do
+        if [ "${IFACE_TYPE[$i]}" == "TAG" ]; then
+            # Para TAGGED: Borrar reglas genéricas por VLAN ID (sin -i)
+            CMD="ebtables -D FORWARD -p 802_1Q --vlan-id $VLAN_ID -o $GATEWAY_IF -j ACCEPT"
+            eval "$CMD 2>/dev/null"
+
+            CMD="ebtables -D FORWARD -p 802_1Q --vlan-id $VLAN_ID -j DROP"
+            eval "$CMD 2>/dev/null"
+        else
+            # Para UNTAGGED: Borrar reglas específicas por interfaz
+            CMD="ebtables -D FORWARD -i $i -o $GATEWAY_IF -j ACCEPT"
+            eval "$CMD 2>/dev/null"
+
+            CMD="ebtables -D FORWARD -i $i -j DROP"
+            eval "$CMD 2>/dev/null"
+        fi
+    done
+}
+
+fnc_estat_ebtables() {
+    VLAN_ID="$1"
+    if [ -z "$VLAN_ID" ]; then echo "NO_AISLADO"; return 1; fi # Default to NO if error
+
+    local CONF_FILE="$DIR/$PROJECTE/$DIR_CONF/$BRIDGE_IF"
+    # Leer interfaces UNTAG y TAG para esta VLAN
+    IFACES=()
+    declare -A IFACE_TYPE
+    
+    while IFS=';' read -r IFACE UNTAG TAG RESTO; do
+        if [[ "$IFACE" =~ ^# ]]; then continue; fi
+        IS_TARGET=0
+        if [ "$UNTAG" == "$VLAN_ID" ]; then
+            IS_TARGET=1
+            IFACE_TYPE["$IFACE"]="UNTAG"
+        else
+             for t in ${TAG//,/ }; do
+                if [ "$t" == "$VLAN_ID" ]; then
+                    IS_TARGET=1
+                    IFACE_TYPE["$IFACE"]="TAG"
+                    break
+                fi
+             done
+        fi
+        if [ "$IS_TARGET" -eq 1 ]; then
+            IFACES+=("$IFACE")
+        fi
+    done < "$CONF_FILE"
+
+    if [ ${#IFACES[@]} -eq 0 ]; then
+         echo "NO_AISLADO"
+         return 0
+    fi
+
+    # Miramos si existe AL MENOS una regla de drop entre los miembros
+    # Basta con verificar el primer par posible
+    local DETECTED=0
+    
+    # Comprobamos ebtables output buscando la regla DROP para esta VLAN
+    local RULES=$(ebtables -L FORWARD)
+    
+    # Buscar reglas DROP genéricas por VLAN o por interfaz
+    for i in "${IFACES[@]}"; do
+        if [ "${IFACE_TYPE[$i]}" == "TAG" ]; then
+             # Para TAGGED: Buscar regla genérica por VLAN ID (sin -i específico)
+             if echo "$RULES" | grep -q "\-p 802_1Q.*--vlan-id $VLAN_ID.*\-j DROP"; then
+                DETECTED=1
+                break
+             fi
+        else
+             # Para UNTAGGED: Buscar regla específica por interfaz
+             if echo "$RULES" | grep -q "\-i $i.*\-j DROP"; then
+                DETECTED=1
+                break
+             fi
+        fi
+    done
+
+    if [ "$DETECTED" -eq 1 ]; then
+        echo "AISLADO"
+    else
+        echo "NO_AISLADO"
+    fi
+}
+
+MSG="falta [iniciar, aturar, configurar ,estat]"
+
+if [ $# -lt 1 ]; then
+  echo "$MSG"
+  exit 1
+fi
+
+OPCIO_1=$1
+shift
+
+case "$OPCIO_1" in
+    iniciar)
+        fnc_iniciar $@
+        ;;
+    aturar)
+        fnc_aturar $@
+        ;;
+    configurar)
+        fnc_configurar $@
+        ;;
+    estat)
+        fnc_estat $@
+        ;;
+    Aplicar_Ebtables)
+        fnc_aplicar_ebtables $@
+        ;;
+    Esborrar_Ebtables)
+        fnc_esborrar_ebtables $@
+        ;;
+    Estat_Ebtables)
+        fnc_estat_ebtables $@
+        ;;
+    *)
+        echo "$MSG"
+        ;;
+esac
+
+
+

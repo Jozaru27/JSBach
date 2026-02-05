@@ -1,0 +1,216 @@
+#!/bin/bash
+
+source /usr/local/JSBach/conf/variables.conf
+
+######################################################################
+###  Funcions
+######################################################################
+
+fnc_carregar_ifwan()
+{
+  source "$DIR/$PROJECTE/$DIR_CONF/$CONF_IFWAN"
+}
+
+
+fnc_iniciar()
+{
+   ESTAT_ACTUAL=$(fnc_estat)
+   
+   if [[ "$ESTAT_ACTUAL" == $ACTIVAT* ]]; then        
+        echo  "Ja esta activada"
+        return 0
+   fi
+      
+  fnc_carregar_ifwan
+  
+  echo "Iniciant DMZ"
+
+  while IFS=';' read -r PORT_INICIAR PROTO_INICIAR IPDMZ_INICIAR; do
+    [[ -z "$PORT_INICIAR" || "$PORT_INICIAR" =~ ^# ]] && continue
+    
+    iptables -t nat -A PREROUTING \
+      -i "$IFW_IFWAN" \
+      -p "$PROTO_INICIAR" \
+      --dport "$PORT_INICIAR" \
+      -j DNAT --to-destination "$IPDMZ_INICIAR:$PORT_INICIAR"
+
+  done < "$DIR/$PROJECTE/$DIR_CONF/$DMZ_CONF"  
+}
+
+
+fnc_aturar()
+{
+
+  ESTAT_ACTUAL=$(fnc_estat|head -n 1)
+  if [[ "$ESTAT_ACTUAL" == $DESACTIVAT* ]]; then
+        echo "Ja esta desactivat"
+        exit 1
+  fi
+  
+  echo "Aturant DMZ"
+
+  fnc_carregar_ifwan
+
+  while IFS=';' read -r PORT_ATURAR PROTO_ATURAR IPDMZ_ATURAR; do
+    [[ -z "$PORT_ATURAR" || "$PORT_ATURAR" =~ ^# ]] && continue
+
+    iptables -t nat -D PREROUTING \
+      -i "$IFW_IFWAN" \
+      -p "$PROTO_ATURAR" \
+      --dport "$PORT_ATURAR" \
+      -j DNAT --to-destination "$IPDMZ_ATURAR:$PORT_ATURAR"
+
+  done < "$DIR/$PROJECTE/$DIR_CONF/$DMZ_CONF"
+}
+
+fnc_configurar()
+{
+ 
+  ACCIO=$1
+  PORT=$2
+  PROTO=$3
+  IPDMZ=$4
+
+  FITXER="$DIR/$PROJECTE/$DIR_CONF/$DMZ_CONF"  
+
+  case "$ACCIO" in
+
+    afegir)    
+      if [ -z "$PORT" ] || [ -z "$PROTO" ] || [ -z "$IPDMZ" ]; then
+        echo "Ús: configurar afegir <port> <tcp|udp> <ip>"
+        return 1
+      fi
+
+      ESTAT_ACTUAL=$(fnc_estat)
+      
+      if grep -q "^$PORT;$PROTO;$IPDMZ$" "$FITXER"; then
+        echo "La regla ja existeix"
+        return 0
+      fi      
+         
+      if [[ "$ESTAT_ACTUAL" == $ACTIVAT* ]]; then          
+        fnc_aturar
+      fi      
+      
+      echo "$PORT;$PROTO;$IPDMZ" >> "$FITXER"
+      echo "Regla afegida"
+
+      if [[ "$ESTAT_ACTUAL" == $ACTIVAT* ]]; then        
+        fnc_iniciar
+      fi
+      ;;
+
+    eliminar)
+    
+      if [ -z "$PORT" ] || [ -z "$PROTO" ] || [ -z "$IPDMZ" ]; then
+        echo "Ús: configurar eliminar <port> <tcp|udp> <ip>"
+        return 1
+      fi
+
+      ESTAT_ACTUAL=$(fnc_estat)
+
+      if ! grep -q "^$PORT;$PROTO;$IPDMZ$" "$FITXER"; then
+        echo "La regla no existeix"
+        return 0
+      fi
+      
+      if [[ "$ESTAT_ACTUAL" == $ACTIVAT* ]]; then        
+        fnc_aturar
+      fi
+      
+
+      sed -i "\|^$PORT;$PROTO;$IPDMZ$|d" "$FITXER"
+      echo "Regla eliminada"
+
+      if [[ "$ESTAT_ACTUAL" == $ACTIVAT* ]]; then           
+        fnc_iniciar
+      fi
+      ;;
+
+    mostrar)
+     
+      grep -v '^#' "$FITXER" | grep -v '^$'
+      ;;
+
+    *)
+      echo "Opcions vàlides:"
+      echo "  configurar afegir <port> <tcp|udp> <ip>"
+      echo "  configurar eliminar <port> <tcp|udp> <ip>"
+      echo "  configurar mostrar"
+      return 1
+      ;;
+  esac
+}
+
+
+fnc_estat()
+{
+  fnc_carregar_ifwan
+
+  ESTAT="$DESACTIVAT"
+
+  while IFS=';' read -r PORT PROTO IPDMZ; do
+    [[ -z "$PORT" || "$PORT" =~ ^# ]] && continue
+
+
+    iptables -t nat -C PREROUTING \
+      -i "$IFW_IFWAN" \
+      -p "$PROTO" \
+      --dport "$PORT" \
+      -j DNAT --to-destination "$IPDMZ:$PORT" 2>/dev/null
+
+    if [ $? -ne 0 ]; then
+      ESTAT="$DESACTIVAT"
+      break
+    fi
+
+    ESTAT="$ACTIVAT"
+
+  done < "$DIR/$PROJECTE/$DIR_CONF/$DMZ_CONF"
+
+  echo "$ESTAT"
+
+  if [[ "$ESTAT" == $ACTIVAT* ]]; then
+    echo " "
+    iptables -t nat -nvL PREROUTING
+  fi
+}
+
+
+
+
+######################################################################
+###  MAIN
+######################################################################
+
+MSG="falta [iniciar, aturar, configurar ,estat]"
+
+# Comprovem que hi hagi almenys un argument (la opció)
+if [ $# -lt 1 ]; then
+  echo "$MSG"
+  exit 1
+fi
+
+OPCIO_1=$1
+shift
+
+# Fem switch per executar la funció que toca
+case "$OPCIO_1" in
+  iniciar)
+    fnc_iniciar  $@
+    ;;
+  aturar)
+    fnc_aturar	$@
+    ;; 
+  configurar) 
+    fnc_configurar $@
+    ;;
+  estat) 
+    fnc_estat $@
+    ;;
+  *)
+    echo "$MSG"
+    ;;
+esac
+
+

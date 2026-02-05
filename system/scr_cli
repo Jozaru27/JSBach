@@ -1,0 +1,36 @@
+#!/bin/bash
+
+source /usr/local/JSBach/conf/variables.conf
+
+
+while read ordre
+do
+	if [[ -n $ordre ]] then
+		
+		Comando=$(echo $ordre| awk '{print $1}') 
+		Arguments=$(echo $ordre| awk '{for (i=2; i<=NF; ++i)  printf $i " " }') 
+				
+		case "$Comando" in
+			"enrutar")  
+			    $DIR/$PROJECTE/$DIR_SCRIPTS/enrutar $Arguments
+			    ;;
+			"ifwan")
+			    $DIR/$PROJECTE/$DIR_SCRIPTS/ifwan $Arguments
+			    ;;
+			"bridge")
+			    $DIR/$PROJECTE/$DIR_SCRIPTS/bridge $Arguments
+			    ;;			    
+			"tallafocs")
+			    $DIR/$PROJECTE/$DIR_SCRIPTS/tallafocs $Arguments
+			    ;;	
+			"dmz")
+			    $DIR/$PROJECTE/$DIR_SCRIPTS/dmz $Arguments
+			    ;;	
+			*) 
+			    echo "CLI Error en l'argument $Comando $Arguments"
+			    ;;
+		esac	
+	fi
+	
+	echo "final"
+done;

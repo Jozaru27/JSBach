@@ -1,0 +1,34 @@
+#!/bin/bash
+
+
+source /usr/local/JSBach/conf/variables.conf
+
+echo "Content-type: text/html; charset=utf-8"
+echo ""
+
+/bin/cat << EOM
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Hola món CGI</title>
+<style>
+body { font-family: sans-serif; margin: 20px; background: #f6f6f6; }
+h2 { background: #ddd; padding: 6px; }
+table { border-collapse: collapse; margin-bottom: 20px; width: 80%; }
+td, th { border: 1px solid #999; padding: 6px 10px; text-align: left; }
+th { background: #f0f0f0; }
+button { padding: 4px 10px; margin-left: 5px; }
+</style>
+</head>
+<body>
+EOM
+
+
+
+/bin/cat << EOM
+</body>
+</html>
+EOM
+
+
+

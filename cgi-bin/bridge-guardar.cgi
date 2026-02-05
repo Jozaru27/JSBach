@@ -1,0 +1,146 @@
+#!/bin/bash
+
+source /usr/local/JSBach/conf/variables.conf
+RUTA="$DIR/$PROJECTE/$DIR_SCRIPTS/client_srv_cli"
+
+urldecode() {
+    local data="${1//+/ }"      # Canvia + per espai
+    printf '%b' "${data//%/\\x}" # Converteix %xx en caràcters
+}
+
+echo "Content-type: text/html; charset=utf-8"
+echo ""
+
+# Extreiem els valors del QUERY_STRING
+accio=$(echo "$QUERY_STRING" | sed -n 's/^.*accio=\([^&]*\).*$/\1/p')
+nom=$(echo "$QUERY_STRING" | sed -n 's/^.*nom=\([^&]*\).*$/\1/p')
+vid=$(echo "$QUERY_STRING" | sed -n 's/^.*vid=\([^&]*\).*$/\1/p')
+ipmasc=$(echo "$QUERY_STRING" | sed -n 's/^.*ipmasc=\([^&]*\).*$/\1/p')
+ippe=$(echo "$QUERY_STRING" | sed -n 's/^.*ippe=\([^&]*\).*$/\1/p')
+
+# Decodifiquem els valors
+nom=$(urldecode "$nom")
+ipmasc=$(urldecode "$ipmasc")
+ippe=$(urldecode "$ippe")
+
+duplicat=0
+if [[ "$accio" == "nova" ]]; then
+    # Comprovar si el VID ja existeix
+    VLAN_DATA=$($RUTA bridge configurar mostrar vlan)
+    if echo "$VLAN_DATA" | cut -d';' -f2 | grep -qw "^$vid$"; then
+        duplicat=1
+    fi
+fi
+
+if [[ "$duplicat" -eq 1 ]]; then
+    REFRESH_URL="/cgi-bin/bridge-nova-vlan.cgi"
+    ICON="❌"
+    TITLE="Error: VID Duplicat"
+    MESSAGE="Ja existeix una xarxa amb el VID <b>$vid</b>. No es poden crear duplicats de l'identificador de VLAN."
+    COLOR="#ef4444"
+else
+    REFRESH_URL="/cgi-bin/bridge-configurar.cgi"
+    ICON="✅"
+    TITLE="Configuració Desada"
+    MESSAGE="La configuració de la VLAN s'ha desat correctament en el sistema."
+    COLOR="#4ade80"
+    # Executar el desat només si no és duplicat
+    $RUTA bridge configurar guardar vlan "$nom" "$vid" "$ipmasc" "$ippe" > /dev/null 2>&1
+fi
+
+cat << EOF
+<html>
+<head>
+  <meta http-equiv="refresh" content="3;url=$REFRESH_URL">
+  <style>
+body {
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+  padding: 40px 20px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: #e2e8f0;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.card {
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  padding: 40px;
+  max-width: 500px;
+  width: 100%;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  backdrop-filter: blur(10px);
+  animation: slideIn 0.4s ease-out;
+}
+
+.icon {
+  font-size: 4rem;
+  margin-bottom: 20px;
+  color: $COLOR;
+}
+
+h2 {
+  margin: 0 0 15px 0;
+  color: #fff;
+}
+
+.message {
+  color: #94a3b8;
+  margin-bottom: 30px;
+  line-height: 1.6;
+}
+
+.loader {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  display: inline-block;
+  animation: spin 1s linear infinite;
+  margin-bottom: 10px;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.btn {
+  background: #3b82f6;
+  color: white;
+  padding: 10px 24px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  display: inline-block;
+  transition: all 0.2s;
+}
+
+.btn:hover { background: #2563eb; transform: translateY(-2px); }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">$ICON</div>
+    <h2>$TITLE</h2>
+    <div class="message">
+      $MESSAGE
+    </div>
+    <div class="loader"></div>
+    <p style="font-size: 0.9rem; color: #64748b;">Redirigint en 3 segons...</p>
+    <br>
+    <a href="$REFRESH_URL" class="btn">Tornar ara</a>
+  </div>
+EOF
+
+cat << EOF
+</body>
+</html>
+EOF
