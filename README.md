@@ -1,3 +1,2 @@
 # JSBach
-# JSBach
-# JSBach
+Configuración de router avanzada, con sistema en bash y apache, gestión de IP, Erutamiento, Bridge, Firewall, DMZ, Switch, etc,...
