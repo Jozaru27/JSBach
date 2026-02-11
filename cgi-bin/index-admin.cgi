@@ -148,6 +148,7 @@ cat << EOF
         <div id="btn-bridge" onclick="loadModule('/cgi-bin/bridge-menu.cgi', '/cgi-bin/bridge.cgi?comand=estat', 'btn-bridge')" class="nav-btn">🌉 Bridge</div>
         <div id="btn-tallafocs" onclick="loadModule('/cgi-bin/tallafocs-menu.cgi', '/cgi-bin/tallafocs-configuracio.cgi', 'btn-tallafocs')" class="nav-btn">🛡️ Tallafocs</div>
         <div id="btn-dmz" onclick="loadModule('/cgi-bin/dmz-menu.cgi', '/cgi-bin/dmz-configurar.cgi', 'btn-dmz')" class="nav-btn">🔓 DMZ</div>
+        <div id="btn-switch" onclick="loadModule('/cgi-bin/switch-menu.cgi', '/cgi-bin/switch.cgi?comand=estat', 'btn-switch')" class="nav-btn">🔌 Switch</div>
       </div>
     </div>
   </div>
