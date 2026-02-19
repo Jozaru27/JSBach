@@ -1,0 +1,23 @@
+spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null admin@10.0.1.2
+Warning: Permanently added '10.0.1.2' (RSA) to the list of known hosts.
+admin@10.0.1.2's password: 
+
+SG2210MP>en
+
+SG2210MP#terminal length 0
+
+SG2210MP#show mac address-table
+
+                    MAC Address Table                    
+------------------------------------------------------------  
+MAC                VLAN    Port     Type            Aging    
+---                ----    ----     ----            -----    
+12:2b:a0:cf:77:58  1       Gi1/0/8  dynamic         aging    
+3c:49:37:05:a8:4a  1       Gi1/0/8  dynamic         aging    
+
+Total MAC Addresses for this criterion: 2
+
+
+SG2210MP#exit
+
+SG2210MP>

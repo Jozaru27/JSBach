@@ -1,0 +1,70 @@
+spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null admin@10.0.1.2
+parent: waiting for sync byte
+parent: telling child to go ahead
+parent: now unsynchronized from child
+spawn: returns {11059}
+Gate keeper glob pattern for '.*[Pp]assword: *$' is '*assword:*'. Activating booster.
+
+expect: does "" (spawn_id exp4) match regular expression ".*[Pp]assword: *$"? Gate "*assword:*"? gate=no
+Warning: Permanently added '10.0.1.2' (RSA) to the list of known hosts.
+
+expect: does "Warning: Permanently added '10.0.1.2' (RSA) to the list of known hosts.\r\r\n" (spawn_id exp4) match regular expression ".*[Pp]assword: *$"? Gate "*assword:*"? gate=no
+admin@10.0.1.2's password: 
+expect: does "Warning: Permanently added '10.0.1.2' (RSA) to the list of known hosts.\r\r\n\radmin@10.0.1.2's password: " (spawn_id exp4) match regular expression ".*[Pp]assword: *$"? Gate "*assword:*"? gate=yes re=yes
+expect: set expect_out(0,string) "Warning: Permanently added '10.0.1.2' (RSA) to the list of known hosts.\r\r\n\radmin@10.0.1.2's password: "
+expect: set expect_out(spawn_id) "exp4"
+expect: set expect_out(buffer) "Warning: Permanently added '10.0.1.2' (RSA) to the list of known hosts.\r\r\n\radmin@10.0.1.2's password: "
+send: sending "ciberseg\r" to { exp4 }
+Gate keeper glob pattern for '.*[^ 
+]+> *$' is '*>*'. Activating booster.
+
+expect: does "" (spawn_id exp4) match regular expression ".*[^ \r\n]+> *$"? Gate "*>*"? gate=no
+
+
+expect: does "\r\n" (spawn_id exp4) match regular expression ".*[^ \r\n]+> *$"? Gate "*>*"? gate=no
+
+SG2210MP>
+expect: does "\r\n\r\n\rSG2210MP>" (spawn_id exp4) match regular expression ".*[^ \r\n]+> *$"? Gate "*>*"? gate=yes re=yes
+expect: set expect_out(0,string) "\r\n\r\n\rSG2210MP>"
+expect: set expect_out(spawn_id) "exp4"
+expect: set expect_out(buffer) "\r\n\r\n\rSG2210MP>"
+send: sending "en\r" to { exp4 }
+Gate keeper glob pattern for '.*[^ 
+]+# *$' is '*#*'. Activating booster.
+
+expect: does "" (spawn_id exp4) match regular expression ".*[^ \r\n]+# *$"? Gate "*#*"? gate=no
+en
+
+SG2210MP#
+expect: does "en\r\n\r\n\rSG2210MP#" (spawn_id exp4) match regular expression ".*[^ \r\n]+# *$"? Gate "*#*"? gate=yes re=yes
+expect: set expect_out(0,string) "en\r\n\r\n\rSG2210MP#"
+expect: set expect_out(spawn_id) "exp4"
+expect: set expect_out(buffer) "en\r\n\r\n\rSG2210MP#"
+send: sending "conf\r" to { exp4 }
+Gate keeper glob pattern for '.*[^ 
+]+# *$' is '*#*'. Activating booster.
+
+expect: does "" (spawn_id exp4) match regular expression ".*[^ \r\n]+# *$"? Gate "*#*"? gate=no
+conf
+
+SG2210MP(config)#
+expect: does "conf\r\n\r\n\rSG2210MP(config)#" (spawn_id exp4) match regular expression ".*[^ \r\n]+# *$"? Gate "*#*"? gate=yes re=yes
+expect: set expect_out(0,string) "conf\r\n\r\n\rSG2210MP(config)#"
+expect: set expect_out(spawn_id) "exp4"
+expect: set expect_out(buffer) "conf\r\n\r\n\rSG2210MP(config)#"
+send: sending "exit\r" to { exp4 }
+Gate keeper glob pattern for '.*[^ 
+]+# *$' is '*#*'. Activating booster.
+
+expect: does "" (spawn_id exp4) match regular expression ".*[^ \r\n]+# *$"? Gate "*#*"? gate=no
+exit
+
+SG2210MP#
+expect: does "exit\r\n\r\n\rSG2210MP#" (spawn_id exp4) match regular expression ".*[^ \r\n]+# *$"? Gate "*#*"? gate=yes re=yes
+expect: set expect_out(0,string) "exit\r\n\r\n\rSG2210MP#"
+expect: set expect_out(spawn_id) "exp4"
+expect: set expect_out(buffer) "exit\r\n\r\n\rSG2210MP#"
+send: sending "exit\r" to { exp4 }
+exit
+
+SG2210MP>expect: timed out
