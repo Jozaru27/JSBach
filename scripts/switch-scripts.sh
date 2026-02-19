@@ -22,14 +22,34 @@ MAC_APPLIED_FILE="$DIR/$PROJECTE/$DIR_CONF/$MACS_APPLIED_CONF"
 MAC_ADMIN_FILE="$DIR/$PROJECTE/$DIR_CONF/$MAC_ADMIN_CONF"
 MAC_ADMIN_APPLIED_FILE="$DIR/$PROJECTE/$DIR_CONF/$MAC_ADMIN_APPLIED_CONF"
 
-# Asegurar archivos existen
-[ ! -f "$SW_CONF_FILE" ] && touch "$SW_CONF_FILE" && chmod 666 "$SW_CONF_FILE"
-[ ! -f "$MAC_CONF_FILE" ] && touch "$MAC_CONF_FILE" && chmod 666 "$MAC_CONF_FILE"
-[ ! -f "$MAC_ADMIN_FILE" ] && touch "$MAC_ADMIN_FILE" && chmod 666 "$MAC_ADMIN_FILE"
+# Asegurar archivos existen y tienen permisos de escritura para el CGI
+for f in "$SW_CONF_FILE" "$MAC_CONF_FILE" "$MAC_ADMIN_FILE" "$MAC_APPLIED_FILE" "$MAC_ADMIN_APPLIED_FILE"; do
+    [ -n "$f" ] && [ ! -f "$f" ] && touch "$f"
+    [ -n "$f" ] && chmod 666 "$f"
+done
+
+
+
 
 ######################################################################
 ###  Funcions Auxiliars
 ######################################################################
+
+get_br0_mac() {
+    # Dynamically get MAC address of br0 interface
+    ip link show br0 | grep "link/ether" | awk '{print $2}'
+}
+
+validar_mac() {
+    local mac=$1
+    [[ $mac =~ ^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$ ]]
+}
+
+validar_ip() {
+    local ip=$1
+    [[ $ip =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]
+}
+
 
 mostrar_tabla_macs() {
     local IP="$1" USER="$2" PASS="$3" PROTO="$4"
@@ -54,7 +74,7 @@ EOF
     else
         /usr/bin/expect <<EOF | awk '/---/ {show=1; next} /Total MAC/ {show=0} show || /Gi/ || /dynamic/'
             set timeout 10
-            spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $USER@$IP
+            spawn ssh -o ConnectTimeout=5 -o GSSAPIAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $USER@$IP
             expect {
                 "yes/no" { send "yes\r"; exp_continue }
                 -re ".*\[Pp\]assword: *$" { send "$PASS\r"; exp_continue }
@@ -64,21 +84,21 @@ EOF
                 eof { exit 1 }
             }
             send "terminal length 0\r"
-            expect -re ".+# *$"
+            expect -re ".\[>#\] *$"
             send "show mac address-table\r"
-            expect -re ".+# *$"
+            expect -re ".\[>#\] *$"
             send "exit\r"
-            expect eof
 EOF
     fi
 }
 
+
 eliminar_acls() {
     local IP="$1" USER="$2" PASS="$3"
-    local INTF="gigabitEthernet 1/0/1-10"
+    
     /usr/bin/expect <<EOF
         set timeout 15
-        spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $USER@$IP
+        spawn ssh -o ConnectTimeout=5 -o GSSAPIAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $USER@$IP
         expect {
             "yes/no" { send "yes\r"; exp_continue }
             -re ".*\[Pp\]assword: *$" { send "$PASS\r"; exp_continue }
@@ -87,39 +107,30 @@ eliminar_acls() {
             timeout { exit 1 }
             eof { exit 1 }
         }
-        send "terminal length 0\r"
-        expect -re ".+# *$"
         send "conf\r"
         expect -re ".+# *"
-        # Desvincular de todas las VLANs posibles
-        for {set v 1} {$v <= 4} {incr v} {
-            send "no access-list bind 1 interface vlan $v\r"
-            expect {
-                -re ".*not existed.*" { exp_continue }
-                -re ".*not defined.*" { exp_continue }
-                -re ".+# *" {}
-            }
-            sleep 0.1
+        
+        # Unbind from VLANs 1-4
+        for {set v 1} {\$v <= 4} {incr v} {
+            send "no access-list bind 1 interface vlan \$v\r"
+            expect -re ".+# *"
         }
+
         send "no access-list create 1\r"
-        expect {
-            -re ".*not existed.*" { exp_continue }
-            -re ".*not defined.*" { exp_continue }
-            -re ".*cannot be deleted.*" { exp_continue }
-            -re ".+# *" {}
-        }
+        expect -re ".+# *"
         send "exit\r"
         expect -re ".+# *$"
         send "copy running-config startup-config\r"
         expect -re ".*OK!.*# *"
-        send "exit\r"
-        expect eof
 EOF
 }
 
+
 crear_acls() {
     local IP="$1" USER="$2" PASS="$3" MODE="$4" NEW_MACS="$5"
-    local ROUTER_MAC="12:2b:a0:cf:77:58"
+    local ROUTER_MAC=$(get_br0_mac)
+    
+    [ -z "$ROUTER_MAC" ] && ROUTER_MAC="12:2b:a0:cf:77:58" # Fallback if dynamic fails
     
     [ ! -f "$MAC_APPLIED_FILE" ] && touch "$MAC_APPLIED_FILE"
     
@@ -136,7 +147,7 @@ crear_acls() {
         set APPLIED $env(APPLIED)
         set ROUTER_MAC $env(ROUTER_MAC)
 
-        spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $USER@$IP
+        spawn ssh -o ConnectTimeout=60 -o GSSAPIAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $USER@$IP
         expect {
             "yes/no" { send "yes\r"; exp_continue }
             -re ".*\[Pp\]assword: *$" { send "$PASS\r"; exp_continue }
@@ -148,42 +159,30 @@ crear_acls() {
         send "terminal length 0\r"
         expect -re ".+# *$"
 
+        set mode_actual $MODE
+        send "show access-list 1\r"
+        expect -re ".+# *$"
+        if { [string match "*not defined*" $expect_out(buffer)] || [string match "*No access list*" $expect_out(buffer)] } {
+            set mode_actual "rebuild"
+        }
+
         send "conf\r"
         expect -re ".+# *"
         
-        # Desvincular de todas las VLANs posibles
+        # Desvincular de todas las VLANs posibles para limpiar
         for {set v 1} {$v <= 4} {incr v} {
             send "no access-list bind 1 interface vlan $v\r"
-            expect {
-                -re ".*not existed.*" { exp_continue }
-                -re ".*not defined.*" { exp_continue }
-                -re ".+# *" {}
-            }
-            sleep 0.1
+            expect -re ".+# *"
         }
 
-        # Siempre borrar la ACL antigua
-        send "no access-list create 1\r"
-        expect {
-            -re ".*not existed.*" { exp_continue }
-            -re ".*not defined.*" { exp_continue }
-            -re ".*cannot be deleted.*" { exp_continue }
-            -re ".+# *" {}
-        }
-        
-        set list ""
-        catch { set list [exec grep -v "^#" $CFG | grep -v "^$" | tr "\n" " "] }
-        
-        # Si hay MACs, creamos la ACL. Si no, salimos y queda borrada.
-        set rule_count 0
-        foreach entry [split $list] {
-            if { $entry != "" } { incr rule_count }
-        }
-        
-        if { $rule_count > 0 } {
+        if { $mode_actual == "rebuild" } {
+            send "no access-list create 1\r"
+            expect -re ".+# *"
             send "access-list create 1 name \"BLOQUEAR_MAC\"\r"
             expect -re ".+# *"
             
+            set list ""
+            catch { set list [exec grep -v "^#" $CFG | grep -v "^$" | tr "\n" " "] }
             set i 1
             foreach entry [split $list] {
                 if { $entry == "" } continue
@@ -192,38 +191,57 @@ crear_acls() {
                 set mac [string tolower $mac]
                 send "access-list mac 1 rule $i deny logging disable smac $mac smask ff:ff:ff:ff:ff:ff\r"
                 expect -re ".+# *"
-                sleep 0.1
+                # sleep 0.1
                 incr i
             }
             send "access-list mac 1 rule 120 permit logging disable\r"
             expect -re ".+# *"
-            
-            # Vincular a VLANs únicas encontradas en la configuración
-            set vlans_used [list]
-            foreach entry [split $list] {
+        } else {
+            set idx 0
+            catch { set idx [exec grep -v "^#" $APPLIED | grep -v "^$" | wc -l] }
+            set i [expr $idx + 1]
+            foreach entry [split $NEW_MACS] {
                 if { $entry == "" } continue
                 set parts [split $entry ";"]
-                if { [llength $parts] > 1 } {
-                    set vlan [lindex $parts 1]
-                    if { [lsearch $vlans_used $vlan] == -1 } {
-                        lappend vlans_used $vlan
-                    }
+                set mac [lindex $parts 0]
+                set mac [string tolower $mac]
+                send "access-list mac 1 rule $i deny logging disable smac $mac smask ff:ff:ff:ff:ff:ff\r"
+                expect -re ".+# *"
+                # sleep 0.1
+                incr i
+            }
+        }
+        
+        # Vincular a VLANs únicas encontradas en la configuración
+        set vlans_used [list]
+        set list ""
+        catch { set list [exec grep -v "^#" $CFG | grep -v "^$" | tr "\n" " "] }
+        foreach entry [split $list] {
+            if { $entry == "" } continue
+            set parts [split $entry ";"]
+            if { [llength $parts] > 1 } {
+                set vlan [lindex $parts 1]
+                if { [lsearch $vlans_used $vlan] == -1 } {
+                    lappend vlans_used $vlan
                 }
             }
-            
-            foreach vlan $vlans_used {
-                send "access-list bind 1 interface vlan $vlan\r"
-                expect -re ".+# *"
-                sleep 0.1
-            }
+        }
+        
+        # Si no hay VLANs especificadas, no vinculamos nada
+        foreach vlan $vlans_used {
+            send "access-list bind 1 interface vlan $vlan\r"
+            expect -re ".+# *"
+            # sleep 0.1
         }
         
         send "exit\r"
         expect -re ".+# *$"
         send "copy running-config startup-config\r"
         expect -re ".*OK!.*# *"
+        send "exit\r"
 EOF
 }
+
 
 eliminar_acls_admin() {
     local IP="$1" USER="$2" PASS="$3"
@@ -233,7 +251,7 @@ eliminar_acls_admin() {
         set IP $env(IP)
         set USER $env(USER)
         set PASS $env(PASS)
-        spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $USER@$IP
+        spawn ssh -o ConnectTimeout=5 -o GSSAPIAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $USER@$IP
         expect {
             -re ".*\[Pp\]assword: *$" { send "$PASS\r"; exp_continue }
             -re ".+> *$" { send "en\r"; exp_continue }
@@ -252,14 +270,13 @@ eliminar_acls_admin() {
 EOF
 }
 
+
 crear_acls_admin() {
     local IP="$1" USER="$2" PASS="$3" MODE="$4" NEW_MACS="$5"
-    local ROUTER_MAC="12:2b:a0:cf:77:58"
+    local ROUTER_MAC=$(get_br0_mac)
+    [ -z "$ROUTER_MAC" ] && ROUTER_MAC="12:2b:a0:cf:77:58"
     
     [ ! -f "$MAC_ADMIN_APPLIED_FILE" ] && touch "$MAC_ADMIN_APPLIED_FILE"
-
-    # Siempre actualizamos el fichero de aplicados con la configuración actual
-    cp "$MAC_ADMIN_FILE" "$MAC_ADMIN_APPLIED_FILE"
 
     IP="$IP" USER="$USER" PASS="$PASS" MODE="$MODE" NEW_MACS="$NEW_MACS" \
     CFG="$MAC_ADMIN_FILE" APPLIED="$MAC_ADMIN_APPLIED_FILE" ROUTER_MAC="$ROUTER_MAC" \
@@ -274,7 +291,7 @@ crear_acls_admin() {
         set APPLIED $env(APPLIED)
         set ROUTER_MAC $env(ROUTER_MAC)
 
-        spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $USER@$IP
+        spawn ssh -o ConnectTimeout=60 -o GSSAPIAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $USER@$IP
         expect {
             "yes/no" { send "yes\r"; exp_continue }
             -re ".*\[Pp\]assword: *$" { send "$PASS\r"; exp_continue }
@@ -289,17 +306,17 @@ crear_acls_admin() {
         send "conf\r"
         expect -re ".+# *"
         
-        # Siempre eliminar y recrear la ACL
+        # Siempre eliminar y recrear la ACL de Admin para asegurar consistencia
         send "no access-list bind 2 interface vlan 1\r"
         expect -re ".+# *"
-        sleep 0.2
+        # sleep 0.2
         send "no access-list create 2\r"
         expect -re ".+# *"
-        sleep 0.2
+        # sleep 0.2
         
         send "access-list create 2 name \"PERMITIR_MAC_ADMIN\"\r"
         expect -re ".+# *"
-        sleep 0.2
+        # sleep 0.2
         
         # Añadir todas las MACs de la lista (empezando desde regla 1)
         set list ""
@@ -310,31 +327,33 @@ crear_acls_admin() {
             set m [string tolower $m]
             send "access-list mac 2 rule $i permit logging disable smac $m smask ff:ff:ff:ff:ff:ff\r"
             expect -re ".+# *"
-            sleep 0.1
+            # sleep 0.1
             incr i
         }
         
         # Siempre permitir el Router (regla 125)
         send "access-list mac 2 rule 125 permit logging disable smac $ROUTER_MAC smask ff:ff:ff:ff:ff:ff\r"
         expect -re ".+# *"
-        sleep 0.2
+        # sleep 0.2
         
         # Denegar todo lo demás (regla 130)
         send "access-list mac 2 rule 130 deny logging disable\r"
         expect -re ".+# *"
-        sleep 0.2
+        # sleep 0.2
         
-        # Vincular a VLAN 1
+        # Vincular a VLAN 1 (Admin)
         send "access-list bind 2 interface vlan 1\r"
         expect -re ".+# *"
-        sleep 0.2
+        # sleep 0.2
         
         send "exit\r"
         expect -re ".+# *$"
         send "copy running-config startup-config\r"
-        expect -re ".*Saving user config OK!.*# *"
+        expect -re ".*OK!.*# *"
+        send "exit\r"
 EOF
 }
+
 
 comprobar_acls() {
     local IP="$1" USER="$2" PASS="$3" ACL_ID="$4"
@@ -381,13 +400,19 @@ fnc_configurar() {
         afegir_mac)
             local mac=$1
             local vlan=$2
+            if ! validar_mac "$mac"; then echo "❌ ERROR: MAC invàlida"; exit 1; fi
+            
             local entry="$mac;$vlan"
-            # Asegurar newline antes de añadir si el fichero no termina en newline
-            [ -s "$MAC_CONF_FILE" ] && [ "$(tail -c1 "$MAC_CONF_FILE")" != "" ] && echo "" >> "$MAC_CONF_FILE"
             if ! grep -qF "$mac" "$MAC_CONF_FILE"; then
+                # Asegurar newline antes de añadir si el fichero no termina en newline
+                [ -s "$MAC_CONF_FILE" ] && [ -n "$(tail -c1 "$MAC_CONF_FILE")" ] && echo "" >> "$MAC_CONF_FILE"
                 echo "$entry" >> "$MAC_CONF_FILE"
+                echo "✅ MAC afegida"
+            else
+                echo "⚠️ MAC ja existeix"
             fi
             ;;
+
         eliminar_mac)
             local mac=$1
             # Escapar caracteres especiales para grep
@@ -423,10 +448,15 @@ EOF
             ;;
         afegir_mac_admin)
             local mac=$1
+            if ! validar_mac "$mac"; then echo "❌ ERROR: MAC invàlida"; exit 1; fi
             if ! grep -qix "^$mac$" "$MAC_ADMIN_FILE"; then
                 echo "$mac" >> "$MAC_ADMIN_FILE"
+                echo "✅ MAC Admin afegida"
+            else
+                echo "⚠️ MAC Admin ja existeix"
             fi
             ;;
+
         eliminar_mac_admin)
             local mac=$1
             grep -v "^$mac$" "$MAC_ADMIN_FILE" > "${MAC_ADMIN_FILE}.tmp"
@@ -487,11 +517,6 @@ EOF
             ;;
         eliminar_acls)
             local target_ip=$1
-            if [ ! -f "$MAC_APPLIED_FILE" ]; then
-                echo "No hay nada que borrar."
-                return 0
-            fi
-
             while IFS=';' read -r linea; do
                 [[ $linea =~ ^# || -z "$linea" ]] && continue
                 local n=$(echo $linea | cut -d ";" -f 1)
@@ -502,12 +527,15 @@ EOF
                 if [ -n "$target_ip" ] && [ "$target_ip" != "$i" ]; then continue; fi
 
                 if ping -c 1 -w 1 "$i" > /dev/null 2>&1; then
-                    echo "Eliminant ACLs del switch $n ($i)..."
+                    echo "--- Eliminando ACLs del switch $n ($i) ---"
                     eliminar_acls "$i" "$u" "$p"
+                    echo "  - ¡Hecho!"
+                    sleep 0.5
                 fi
             done < "$SW_CONF_FILE"
             rm -f "$MAC_APPLIED_FILE"
             ;;
+
         crear_acls_admin)
             local target_ip=$1
             local MACS_ACTUALS=$(grep -v "^#" "$MAC_ADMIN_FILE" | grep -v "^$" | sort)
@@ -541,11 +569,6 @@ EOF
             ;;
         eliminar_acls_admin)
             local target_ip=$1
-            if [ ! -f "$MAC_ADMIN_APPLIED_FILE" ]; then
-                echo "No hay nada que borrar."
-                return 0
-            fi
-
             while IFS=';' read -r linea; do
                 [[ $linea =~ ^# || -z "$linea" ]] && continue
                 local n=$(echo $linea | cut -d ";" -f 1)
@@ -556,12 +579,15 @@ EOF
                 if [ -n "$target_ip" ] && [ "$target_ip" != "$i" ]; then continue; fi
 
                 if ping -c 1 -w 1 "$i" > /dev/null 2>&1; then
-                    echo "Eliminant ACLs ADMIN del switch $n ($i)..."
+                    echo "--- Eliminando ACLs ADMIN del switch $n ($i) ---"
                     eliminar_acls_admin "$i" "$u" "$p"
+                    echo "  - ¡Hecho!"
+                    sleep 0.5
                 fi
             done < "$SW_CONF_FILE"
             rm -f "$MAC_ADMIN_APPLIED_FILE"
             ;;
+
         comprobar_acls)
             local target_ip=$1
             while IFS=';' read -r linea; do
@@ -596,13 +622,31 @@ EOF
 }
 
 fnc_estat() {
-	while IFS=';' read -r linea; do
+    local pids=()
+    local results_file=$(mktemp)
+    while IFS=';' read -r linea; do
         [[ $linea == \#* || -z "$linea" ]] && continue
-		local nom=$(echo $linea | cut -d ";" -f 1)
-		local ip=$(echo $linea | cut -d ";" -f 2)
-		ping -c 1 -W 0.5 "$ip" > /dev/null 2>&1 && echo "$nom;$ip;Activo" || echo "$nom;$ip;No Encontrado"
-	done < "$SW_CONF_FILE"
+        local nom=$(echo $linea | cut -d ";" -f 1)
+        local ip=$(echo $linea | cut -d ";" -f 2)
+        (
+            if ping -c 1 -W 0.5 "$ip" > /dev/null 2>&1; then
+                echo "$nom;$ip;ACTIVAT" >> "$results_file"
+            else
+                echo "$nom;$ip;DESACTIVAT" >> "$results_file"
+            fi
+        ) &
+        pids+=($!)
+    done < "$SW_CONF_FILE"
+    
+    for pid in "${pids[@]}"; do
+        wait "$pid" 2>/dev/null
+    done
+    
+    # Ordenamos un poco para que sea consistente
+    sort "$results_file"
+    rm -f "$results_file"
 }
+
 
 case "$1" in
   configurar) shift; fnc_configurar "$@" ;;

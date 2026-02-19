@@ -23,6 +23,51 @@ get_status() {
     fi
 }
 
+get_switch_status() {
+    local sw_conf="/usr/local/JSBach/conf/switches.conf"
+    [ ! -f "$sw_conf" ] && echo "<span class='status-badge badge-inactive'>SENSE CONFIGURAR</span>" && return
+    
+    local total=0
+    local ips=()
+    while IFS=';' read -r linea; do
+        [[ $linea == \#* || -z "$linea" ]] && continue
+        local ip=$(echo "$linea" | cut -d ";" -f 2)
+        [ -n "$ip" ] && ips+=("$ip") && ((total++))
+    done < "$sw_conf"
+    
+    if [ $total -eq 0 ]; then
+        echo "<span class='status-badge badge-inactive'>SENSE CONFIGURAR</span>"
+        return
+    fi
+    
+    local active=0
+    local pids=()
+    local results_file=$(mktemp)
+    
+    for ip in "${ips[@]}"; do
+        (
+            if ping -c 1 -W 0.5 "$ip" > /dev/null 2>&1; then
+                echo "1" >> "$results_file"
+            fi
+        ) &
+        pids+=($!)
+    done
+    
+    for pid in "${pids[@]}"; do
+        wait "$pid" 2>/dev/null
+    done
+    
+    active=$(wc -l < "$results_file")
+    rm -f "$results_file"
+    
+    if [ "$active" -gt 0 ]; then
+        echo "<span class='status-badge badge-active'>ACTIU $active/$total</span>"
+    else
+        echo "<span class='status-badge badge-inactive'>INACTIU 0/$total</span>"
+    fi
+}
+
+
 cat << EOF
 <!DOCTYPE html>
 <html lang="ca">
@@ -207,8 +252,20 @@ body {
       <p class="module-desc">Configuració de zones desmilitaritzades i obertura de ports a servidors.</p>
       <div class="action-hint">Gestionar mòdul ➜</div>
     </div>
+
+    <!-- Switches -->
+    <div class="module-card" onclick="gotoModule('/cgi-bin/switch-menu.cgi', '/cgi-bin/switch.cgi?comand=estat', 'btn-switch')">
+      <div class="module-header">
+        <div class="module-name">🔌 Switch</div>
+        $(get_switch_status)
+      </div>
+      <p class="module-desc">Gestió de commutadors, puncis d'accés, polítiques de MAC i VLANs.</p>
+      <div class="action-hint">Gestionar mòdul ➜</div>
+    </div>
   </div>
 </div>
+
+
 
 </body>
 </html>
