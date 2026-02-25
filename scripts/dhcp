@@ -112,11 +112,6 @@ case "$COMANDO" in
             fi
 
             sed -i "s|$CURR_LINE|$NEW_LINE|" /etc/dnsmasq.conf
-            
-            if [ $IS_ACTIVE -eq 1 ]; then
-                systemctl stop dnsmasq > /dev/null 2>&1
-                systemctl start dnsmasq > /dev/null 2>&1
-            fi
             echo "OK"
         else
             echo "ERROR: Interface not found"
@@ -126,9 +121,6 @@ case "$COMANDO" in
         # Arguments: interface
         IF=$2
         
-        IS_ACTIVE=0
-        if systemctl is-active --quiet dnsmasq; then IS_ACTIVE=1; fi
-
         # Buscar la línia (activa o comentada)
         LINE=$(grep -E "^#?dhcp-range=interface:$IF," /etc/dnsmasq.conf | head -n 1)
         
@@ -142,14 +134,17 @@ case "$COMANDO" in
             fi
             
             sed -i "s|$LINE|$NEW_LINE|" /etc/dnsmasq.conf
-            
-            if [ $IS_ACTIVE -eq 1 ]; then
-                systemctl stop dnsmasq > /dev/null 2>&1
-                systemctl start dnsmasq > /dev/null 2>&1
-            fi
             echo "OK"
         else
             echo "ERROR: Interface range not found"
+        fi
+        ;;
+    restart_if_active)
+        if systemctl is-active --quiet dnsmasq; then
+            systemctl restart dnsmasq > /dev/null 2>&1
+            echo "RESTARTED"
+        else
+            echo "STAYED_OFF"
         fi
         ;;
     *)

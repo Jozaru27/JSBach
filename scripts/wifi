@@ -83,7 +83,8 @@ case "$COMANDO" in
             if [ -n "$IF" ]; then
                  ip link set "$IF" up > /dev/null 2>&1
             fi
-            systemctl start hostapd > /dev/null 2>&1
+            # Fem servir restart per assegurar que torna a pujar correctament
+            systemctl restart hostapd > /dev/null 2>&1
         fi
         echo "OK"
         ;;

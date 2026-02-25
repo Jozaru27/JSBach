@@ -22,6 +22,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         interface=$(echo "$post_data" | sed -n 's/^.*interface=\([^&]*\).*$/\1/p')
         if_dec=$(urldecode "$interface")
         "$DIR"/"$PROJECTE"/"$DIR_SCRIPTS"/client_srv_cli dhcp "toggle_range" "$if_dec" > /dev/null
+        "$DIR"/"$PROJECTE"/"$DIR_SCRIPTS"/client_srv_cli dhcp "restart_if_active" > /dev/null
         MSG="Estat del rang DHCP canviat"
     else
         # Collect all and apply
@@ -37,7 +38,9 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
             
             "$DIR"/"$PROJECTE"/"$DIR_SCRIPTS"/client_srv_cli dhcp "save_config_range" "$ifname_dec" "$val_dec" "$end_dec" > /dev/null
         done
-        MSG="Configuració DHCP guardada i servei reiniciat"
+        # Restart once at the end if it was active
+        "$DIR"/"$PROJECTE"/"$DIR_SCRIPTS"/client_srv_cli dhcp "restart_if_active" > /dev/null
+        MSG="Configuració DHCP guardada i servei actualitzat"
     fi
     
     echo "<html><head><script>window.location.href='/cgi-bin/dhcp.cgi?comand=configuracio';</script></head><body></body></html>"
