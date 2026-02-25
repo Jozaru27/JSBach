@@ -262,6 +262,26 @@ body {
       <p class="module-desc">Gestió de commutadors, puncis d'accés, polítiques de MAC i VLANs.</p>
       <div class="action-hint">Gestionar mòdul ➜</div>
     </div>
+
+    <!-- WiFi -->
+    <div class="module-card" onclick="gotoModule('/cgi-bin/wifi-menu.cgi', '/cgi-bin/wifi.cgi?comand=estat', 'btn-wifi')">
+      <div class="module-header">
+        <div class="module-name">📡 WiFi</div>
+        $(get_status "wifi")
+      </div>
+      <p class="module-desc">Configuració del Punt d'Accés per a xarxes sense fils.</p>
+      <div class="action-hint">Gestionar mòdul ➜</div>
+    </div>
+
+    <!-- DHCP -->
+    <div class="module-card" onclick="gotoModule('/cgi-bin/dhcp-menu.cgi', '/cgi-bin/dhcp.cgi?comand=estat', 'btn-dhcp')">
+      <div class="module-header">
+        <div class="module-name">🔌 DHCP</div>
+        $(get_status "dhcp")
+      </div>
+      <p class="module-desc">Gestió d'assignació d'IPs dinàmiques i rangs de xarxa.</p>
+      <div class="action-hint">Gestionar mòdul ➜</div>
+    </div>
   </div>
 </div>
 
