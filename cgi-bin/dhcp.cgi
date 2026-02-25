@@ -40,7 +40,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         MSG="Configuració DHCP guardada i servei reiniciat"
     fi
     
-    echo "<html><head><script>alert('$MSG'); window.location.href='/cgi-bin/dhcp.cgi?comand=configuracio';</script></head><body></body></html>"
+    echo "<html><head><script>window.location.href='/cgi-bin/dhcp.cgi?comand=configuracio';</script></head><body></body></html>"
     exit 0
 fi
 
@@ -76,12 +76,14 @@ cat << EOF
   <meta charset="utf-8">
   <title>$TITLE - JSBach</title>
   <style>
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Fira+Code&display=swap');
+
 body {
-  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Outfit', sans-serif;
   margin: 0;
-  padding: 2.5rem;
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-  color: #e2e8f0;
+  padding: 3rem;
+  background: radial-gradient(circle at top left, #1e293b 0%, #0f172a 100%);
+  color: #f1f5f9;
   min-height: 100vh;
 }
 
@@ -91,134 +93,220 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 40px;
+  margin-bottom: 4rem;
 }
 
 h1 {
-  background: rgba(255, 255, 255, 0.05);
-  padding: 18px 24px;
-  border-radius: 12px;
-  border-left: 4px solid #3b82f6;
-  font-weight: 600;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 20px 30px;
+  border-radius: 20px;
+  border-left: 5px solid #3b82f6;
+  font-weight: 800;
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 20px;
   margin: 0;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
 }
 
 .card {
-  background: rgba(30, 41, 59, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 20px;
-  padding: 35px;
-  box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.3);
+  background: rgba(30, 41, 59, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  padding: 40px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(15px);
-  margin-bottom: 35px;
+  margin-bottom: 40px;
+  transition: transform 0.3s ease;
 }
 
+.card:hover { transform: translateY(-5px); }
+
 h3 { 
-  margin: 0 0 25px 0;
+  margin: 0 0 30px 0;
   padding-bottom: 15px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 1.3rem;
-  font-weight: 700;
+  border-bottom: 2px solid rgba(59, 130, 246, 0.3);
+  font-size: 1.5rem;
+  font-weight: 800;
   color: #60a5fa;
   letter-spacing: 0.5px;
 }
 
-.badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }
-.badge-green { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
-.badge-red { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
-.badge-blue { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
+.badge { display: inline-block; padding: 8px 18px; border-radius: 50px; font-size: 0.85rem; font-weight: 800; text-transform: uppercase; }
+.badge-green { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34,197,94,0.4); }
+.badge-red { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.4); }
+.badge-blue { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59,130,246,0.4); }
 
 table {
   width: 100%;
   border-collapse: separate;
-  border-spacing: 0 10px;
+  border-spacing: 0 12px;
   margin-top: 10px;
 }
 
 th {
   text-align: left;
-  padding: 12px 15px;
+  padding: 12px 20px;
   color: #94a3b8;
   font-size: 0.85rem;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 td {
-  padding: 15px;
-  background: rgba(255, 255, 255, 0.02);
-  border-top: 1px solid rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.3s ease;
 }
 
-td:first-child { border-left: 1px solid rgba(255, 255, 255, 0.03); border-radius: 12px 0 0 12px; }
-td:last-child { border-right: 1px solid rgba(255, 255, 255, 0.03); border-radius: 0 12px 12px 0; }
+tr:hover td { background: rgba(255, 255, 255, 0.06); }
+
+td:first-child { border-left: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px 0 0 16px; font-weight: 700; color: #fff; }
+td:last-child { border-right: 1px solid rgba(255, 255, 255, 0.05); border-radius: 0 16px 16px 0; }
 
 input[type="text"] {
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  border-radius: 10px;
   color: #fff;
-  padding: 10px 12px;
+  padding: 12px 15px;
   width: 100%;
-  max-width: 160px;
-  font-size: 0.95rem;
-  transition: all 0.2s ease;
+  max-width: 180px;
+  font-size: 1rem;
+  transition: all 0.3s ease;
 }
 
 input[type="text"]:focus {
   outline: none;
   border-color: #3b82f6;
   background: rgba(15, 23, 42, 0.8);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
 }
 
 .btn-save {
   background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   color: white;
   border: none;
-  padding: 16px 32px;
-  border-radius: 12px;
-  font-weight: 700;
-  font-size: 1rem;
+  padding: 20px 40px;
+  border-radius: 16px;
+  font-weight: 800;
+  font-size: 1.1rem;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3);
 }
 
 .btn-save:hover { 
-  transform: translateY(-2px);
-  box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.4);
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 20px 25px -5px rgba(37, 99, 235, 0.4);
   filter: brightness(1.1);
 }
 
 [style*="font-family: monospace"] {
-  background: #020617;
-  color: #94a3b8;
-  padding: 24px;
-  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.8);
+  color: #cbd5e1;
+  padding: 25px;
+  border-radius: 16px;
   white-space: pre-wrap;
   word-break: break-all;
   border: 1px solid rgba(255, 255, 255, 0.05);
+  font-family: 'Fira Code', monospace !important;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);
 }
+
+/* Overlay de reinici */
+#overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(20px);
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+.spinner {
+  width: 70px;
+  height: 70px;
+  border: 4px solid rgba(59, 130, 246, 0.1);
+  border-top: 4px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  margin-bottom: 30px;
+  box-shadow: 0 0 30px rgba(59, 130, 246, 0.2);
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.overlay-text { font-size: 1.8rem; font-weight: 800; color: #fff; letter-spacing: -0.02em; }
 </style>
+<script>
+function showLoading(text) {
+    if (text) document.querySelector('.overlay-text').innerText = text;
+    document.getElementById('overlay').style.display = 'flex';
+    document.querySelector('.container').style.filter = 'blur(8px)';
+    document.querySelector('.container').style.transition = 'filter 0.5s ease';
+}
+
+function ip2int(ip) {
+    return ip.split('.').reduce((res, item) => (res << 8) + parseInt(item), 0) >>> 0;
+}
+
+function isSameSubnet(ip1, ip2, maskStr) {
+    const int1 = ip2int(ip1);
+    const int2 = ip2int(ip2);
+    let mask = 24;
+    if (maskStr.includes('.')) {
+        if (maskStr === '255.255.255.0') mask = 24;
+        else if (maskStr === '255.255.255.128') mask = 25;
+        else if (maskStr === '255.255.0.0') mask = 16;
+        else if (maskStr === '255.0.0.0') mask = 8;
+    } else {
+        mask = parseInt(maskStr);
+    }
+    const shift = 32 - mask;
+    return (int1 >>> shift) === (int2 >>> shift);
+}
+
+function validateAndSubmit() {
+    const rows = document.querySelectorAll('tbody tr');
+    for (let row of rows) {
+        const start = row.querySelector('input[name*="_start"]').value;
+        const end = row.querySelector('input[name*="_end"]').value;
+        const mask = row.cells[4].innerText.trim();
+        const iface = row.cells[0].innerText.trim();
+        
+        if (!isSameSubnet(start, end, mask)) {
+            alert('Error a la interfície ' + iface + ': Els rangs han d\'estar a la mateixa subxarxa (' + mask + ')');
+            return false;
+        }
+    }
+    showLoading();
+    return true;
+}
+</script>
 </head>
 <body>
+  <div id="overlay">
+    <div class="spinner"></div>
+    <div class="overlay-text">Reiniciant servei DHCP...</div>
+  </div>
   <div class="container">
 EOF
 
 if [ "$comand" = "configuracio" ]; then
     cat << EOF
     <div class="page-header">
-        <h1><span style="font-size: 2rem;">$ICON</span> $TITLE</h1>
+        <h1><span style="font-size: 2.5rem;">$ICON</span> $TITLE</h1>
     </div>
     <div class="card">
       <h3>Configuració de Rangs DHCP</h3>
-      <form method="POST" id="dhcpForm">
+      <form method="POST" id="dhcpForm" onsubmit="return validateAndSubmit()">
         <input type="hidden" name="action" value="save" id="formAction">
         <input type="hidden" name="interface" value="" id="formInterface">
         <table>
@@ -229,7 +317,7 @@ if [ "$comand" = "configuracio" ]; then
               <th>Rang d'Inici</th>
               <th>Rang Final</th>
               <th>Mascara</th>
-              <th>Temps de lloguer</th>
+              <th>Lloguer</th>
               <th style="text-align: right;">Accions</th>
             </tr>
           </thead>
@@ -239,10 +327,7 @@ EOF
     grep -E "^#?dhcp-range=interface:" /etc/dnsmasq.conf | while read -r line; do
         is_commented=0
         echo "$line" | grep -q "^#" && is_commented=1
-        
-        # Clean line for parsing
         clean_line=$(echo "$line" | sed 's/^#//')
-        
         ifname=$(echo "$clean_line" | cut -d':' -f2 | cut -d',' -f1)
         start=$(echo "$clean_line" | cut -d',' -f2)
         end=$(echo "$clean_line" | cut -d',' -f3)
@@ -260,7 +345,7 @@ EOF
         fi
 
         echo "<tr style='$row_style'>"
-        echo "<td><b>$ifname</b></td>"
+        echo "<td>$ifname</td>"
         echo "<td>$status_badge</td>"
         echo "<td><input type='text' name='range_${ifname}_start' value='$start'></td>"
         echo "<td><input type='text' name='range_${ifname}_end' value='$end'></td>"
@@ -281,9 +366,10 @@ EOF
     </div>
     
     <script>
-    function toggleRange(ifname) {
+    function toggleRange(iface) {
+        showLoading("Canviant estat del rang...");
         document.getElementById('formAction').value = 'toggle';
-        document.getElementById('formInterface').value = ifname;
+        document.getElementById('formInterface').value = iface;
         document.getElementById('dhcpForm').submit();
     }
     </script>
@@ -291,19 +377,27 @@ EOF
 else
     cat << EOF
     <div class="page-header">
-        <h1><span style="font-size: 2rem;">$ICON</span> $TITLE</h1>
+        <h1><span style="font-size: 2.5rem;">$ICON</span> $TITLE</h1>
         $(get_badge "$ESTAT_GRAL")
     </div>
 EOF
     echo "$HTML_CONTENT" | awk '
-    BEGIN { first=1 }
+    BEGIN { first=1; card_opened=0 }
     /<h3>/ {
-        if (!first) print "</div>"
+        if (card_opened) print "</div>"
         print "<div class=\"card\">"
+        card_opened=1
         first=0
     }
-    { print $0 }
-    END { if (!first) print "</div>" }
+    { 
+        if (first && !card_opened) {
+            print "<div class=\"card\">"
+            card_opened=1
+            first=0
+        }
+        print $0 
+    }
+    END { if (card_opened) print "</div>" }
     '
 fi
 

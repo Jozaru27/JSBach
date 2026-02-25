@@ -39,7 +39,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         "$ssid_dec" "$pass_dec" "$channel" "$hw_mode" "$ieee" "$wmm" \
         "$if_dec" "$auth_algs" "$wpa_ver" "$kmgmt_dec" "$rsn_dec" > /dev/null
     
-    echo "<html><head><script>alert('Configuració guardada i servei reiniciat'); window.location.href='/cgi-bin/wifi.cgi?comand=configuracio';</script></head><body></body></html>"
+    echo "<html><head><script>window.location.href='/cgi-bin/wifi.cgi?comand=configuracio';</script></head><body></body></html>"
     exit 0
 fi
 
@@ -62,6 +62,23 @@ case "$comand" in
     configuracio) TITLE="Configuració WiFi" ; ICON="⚙️" ;;
 esac
 
+# Helper to get hostapd config values
+get_conf() { grep "^$1=" /etc/hostapd/hostapd.conf | cut -d'=' -f2; }
+
+if [ "$comand" = "configuracio" ]; then
+    curr_if=$(get_conf "interface")
+    curr_ssid=$(get_conf "ssid")
+    curr_hw=$(get_conf "hw_mode")
+    curr_chan=$(get_conf "channel")
+    curr_n=$(get_conf "ieee80211n")
+    curr_wmm=$(get_conf "wmm_enabled")
+    curr_auth=$(get_conf "auth_algs")
+    curr_wpa=$(get_conf "wpa")
+    curr_kmgmt=$(get_conf "wpa_key_mgmt")
+    curr_rsn=$(get_conf "rsn_pairwise")
+    curr_pass=$(get_conf "wpa_passphrase")
+fi
+
 get_badge() {
     if echo "$1" | grep -qiw "ACTIVAT"; then echo "<span class='badge badge-green'>ACTIU</span>"
     elif echo "$1" | grep -qiw "DESACTIVAT"; then echo "<span class='badge badge-red'>INACTIU</span>"
@@ -75,12 +92,14 @@ cat << EOF
   <meta charset="utf-8">
   <title>$TITLE - JSBach</title>
   <style>
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Fira+Code&display=swap');
+
 body {
-  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Outfit', sans-serif;
   margin: 0;
-  padding: 2.5rem;
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-  color: #e2e8f0;
+  padding: 3rem;
+  background: radial-gradient(circle at top left, #1e293b 0%, #0f172a 100%);
+  color: #f1f5f9;
   min-height: 100vh;
 }
 
@@ -90,61 +109,66 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 40px;
+  margin-bottom: 4rem;
 }
 
 h1 {
-  background: rgba(255, 255, 255, 0.05);
-  padding: 18px 24px;
-  border-radius: 12px;
-  border-left: 4px solid #3b82f6;
-  font-weight: 600;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 20px 30px;
+  border-radius: 20px;
+  border-left: 5px solid #3b82f6;
+  font-weight: 800;
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 20px;
   margin: 0;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
 }
 
 .card {
-  background: rgba(30, 41, 59, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 20px;
-  padding: 35px;
-  box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.3);
+  background: rgba(30, 41, 59, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  padding: 40px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(15px);
-  margin-bottom: 35px;
+  margin-bottom: 40px;
+  transition: transform 0.3s ease;
 }
 
+.card:hover { transform: translateY(-5px); }
+
 h3 { 
-  margin: 0 0 25px 0;
+  margin: 0 0 30px 0;
   padding-bottom: 15px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 1.3rem;
-  font-weight: 700;
+  border-bottom: 2px solid rgba(59, 130, 246, 0.3);
+  font-size: 1.5rem;
+  font-weight: 800;
   color: #60a5fa;
   letter-spacing: 0.5px;
 }
 
-.badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }
-.badge-green { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
-.badge-red { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
-.badge-blue { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
+.badge { display: inline-block; padding: 8px 18px; border-radius: 50px; font-size: 0.85rem; font-weight: 800; text-transform: uppercase; }
+.badge-green { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34,197,94,0.4); }
+.badge-red { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.4); }
+.badge-blue { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59,130,246,0.4); }
 
-.form-group { margin-bottom: 25px; }
-label { display: block; margin-bottom: 10px; font-weight: 600; color: #94a3b8; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.5px; }
+.form-group { margin-bottom: 30px; }
+label { display: block; margin-bottom: 12px; font-weight: 700; color: #94a3b8; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
 
 input[type="text"], 
 input[type="password"], 
 input[type="number"],
 select {
   width: 100%;
-  padding: 14px 16px;
+  padding: 16px 20px;
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+  border-radius: 14px;
   color: #fff;
   font-size: 1rem;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
   box-sizing: border-box;
 }
 
@@ -152,86 +176,98 @@ input:focus, select:focus {
   outline: none;
   border-color: #3b82f6;
   background: rgba(15, 23, 42, 0.8);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-}
-
-/* Millora específica per a inputs numèrics */
-input[type="number"] {
-  -moz-appearance: textfield;
-}
-
-input[type="number"]::-webkit-outer-spin-button,
-input[type="number"]::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
 }
 
 .btn-save {
   background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   color: white;
   border: none;
-  padding: 16px 32px;
-  border-radius: 12px;
-  font-weight: 700;
-  font-size: 1rem;
+  padding: 20px 40px;
+  border-radius: 16px;
+  font-weight: 800;
+  font-size: 1.1rem;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3);
   width: 100%;
 }
 
 .btn-save:hover { 
-  transform: translateY(-2px);
-  box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.4);
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 20px 25px -5px rgba(37, 99, 235, 0.4);
   filter: brightness(1.1);
-}
-
-.btn-save:active {
-  transform: translateY(0);
 }
 
 .grid-config {
   display: grid; 
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
-  gap: 25px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); 
+  gap: 30px;
 }
 
 [style*="font-family: monospace"] {
-  background: #020617;
-  color: #94a3b8;
-  padding: 24px;
-  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.8);
+  color: #cbd5e1;
+  padding: 25px;
+  border-radius: 16px;
   white-space: pre-wrap;
   word-break: break-all;
   border: 1px solid rgba(255, 255, 255, 0.05);
+  font-family: 'Fira Code', monospace !important;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);
 }
+
+/* Overlay de reinici */
+#overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(20px);
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+.spinner {
+  width: 70px;
+  height: 70px;
+  border: 4px solid rgba(59, 130, 246, 0.1);
+  border-top: 4px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  margin-bottom: 30px;
+  box-shadow: 0 0 30px rgba(59, 130, 246, 0.2);
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.overlay-text { font-size: 1.8rem; font-weight: 800; color: #fff; letter-spacing: -0.02em; }
 </style>
+<script>
+function showLoading() {
+    document.getElementById('overlay').style.display = 'flex';
+    document.querySelector('.container').style.filter = 'blur(8px)';
+    document.querySelector('.container').style.transition = 'filter 0.5s ease';
+}
+</script>
 </head>
 <body>
+  <div id="overlay">
+    <div class="spinner"></div>
+    <div class="overlay-text">Reiniciant servei WiFi...</div>
+  </div>
   <div class="container">
 EOF
 
 if [ "$comand" = "configuracio" ]; then
-    # Load current values
-    curr_ssid=$(grep "^ssid=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
-    curr_pass=$(grep "^wpa_passphrase=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
-    curr_chan=$(grep "^channel=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
-    curr_hw=$(grep "^hw_mode=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
-    curr_ieee=$(grep "^ieee80211n=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
-    curr_wmm=$(grep "^wmm_enabled=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
-    curr_if=$(grep "^interface=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
-    curr_auth=$(grep "^auth_algs=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
-    curr_wpa=$(grep "^wpa=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
-    curr_kmgmt=$(grep "^wpa_key_mgmt=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
-    curr_rsn=$(grep "^rsn_pairwise=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
-    
     cat << EOF
     <div class="page-header">
-        <h1><span style="font-size: 2rem;">$ICON</span> $TITLE</h1>
+        <h1><span style="font-size: 2.5rem;">$ICON</span> $TITLE</h1>
     </div>
     <div class="card">
       <h3>Configuració del Punt d'Accés</h3>
-      <form method="POST">
+      <form method="POST" onsubmit="showLoading()">
         <div class="grid-config">
             <div class="form-group">
                 <label>Nom de la interfície (interface)</label>
@@ -250,10 +286,10 @@ if [ "$comand" = "configuracio" ]; then
                 </select>
             </div>
             <div class="form-group">
-                <label>IEEE 802.11n</label>
+                <label>IEEE 802.11n (High Throughput)</label>
                 <select name="ieee">
-                    <option value="1" $( [ "$curr_ieee" = "1" ] && echo "selected" )>Activat</option>
-                    <option value="0" $( [ "$curr_ieee" = "0" ] && echo "selected" )>Desactivat</option>
+                    <option value="1" $( [ "$curr_n" = "1" ] && echo "selected" )>Activat</option>
+                    <option value="0" $( [ "$curr_n" = "0" ] && echo "selected" )>Desactivat</option>
                 </select>
             </div>
             <div class="form-group">
@@ -297,19 +333,27 @@ EOF
 else
     cat << EOF
     <div class="page-header">
-        <h1><span style="font-size: 2rem;">$ICON</span> $TITLE</h1>
+        <h1><span style="font-size: 2.5rem;">$ICON</span> $TITLE</h1>
         $(get_badge "$ESTAT_GRAL")
     </div>
 EOF
     echo "$HTML_CONTENT" | awk '
-    BEGIN { first=1 }
+    BEGIN { first=1; card_opened=0 }
     /<h3>/ {
-        if (!first) print "</div>"
+        if (card_opened) print "</div>"
         print "<div class=\"card\">"
+        card_opened=1
         first=0
     }
-    { print $0 }
-    END { if (!first) print "</div>" }
+    { 
+        if (first && !card_opened) {
+            print "<div class=\"card\">"
+            card_opened=1
+            first=0
+        }
+        print $0 
+    }
+    END { if (card_opened) print "</div>" }
     '
 fi
 

@@ -5,6 +5,35 @@ source /usr/local/JSBach/conf/variables.conf
 
 COMANDO=$1
 
+# Helper: IP string to integer
+ip2int() {
+    local IFS=.
+    local ip=($1)
+    echo "$(( (ip[0] << 24) | (ip[1] << 16) | (ip[2] << 8) | ip[3] ))"
+}
+
+# Helper: Check if two IPs are in same subnet
+is_same_subnet() {
+    local ip1=$(ip2int "$1")
+    local ip2=$(ip2int "$2")
+    local mask_str="$3"
+    
+    # Simple mask logic (assuming /24 for now if not valid int, or handle common ones)
+    local mask=32
+    if [[ "$mask_str" =~ ^[0-9]+$ ]]; then
+        mask="$mask_str"
+    elif [[ "$mask_str" == "255.255.255.0" ]]; then
+        mask=24
+    elif [[ "$mask_str" == "255.255.255.128" ]]; then
+        mask=25
+    elif [[ "$mask_str" == "255.255.0.0" ]]; then
+        mask=16
+    fi
+    
+    local shift=$(( 32 - mask ))
+    [ "$(( ip1 >> shift ))" -eq "$(( ip2 >> shift ))" ]
+}
+
 case "$COMANDO" in
     iniciar)
         systemctl start dnsmasq > /dev/null 2>&1
@@ -33,7 +62,18 @@ case "$COMANDO" in
         echo "<h3>Clientes DHCP Actius</h3>"
         echo "<div style='font-family: monospace;'>"
         if [ -f /var/lib/misc/dnsmasq.leases ]; then
-            cat /var/lib/misc/dnsmasq.leases
+            # Anonymize help: if 4th field is "*", replace with "Invitado Anónimo X"
+            anon_count=1
+            while read -r line; do
+                hostname=$(echo "$line" | cut -d' ' -f4)
+                if [ "$hostname" == "*" ]; then
+                    new_line=$(echo "$line" | sed "s/ \* / Invitado_Anónimo_$anon_count /")
+                    echo "$new_line"
+                    ((anon_count++))
+                else
+                    echo "$line"
+                fi
+            done < /var/lib/misc/dnsmasq.leases
         else
             echo "No hi ha lloguers DHCP actius."
         fi
@@ -64,6 +104,13 @@ case "$COMANDO" in
             echo "$CURR_LINE" | grep -q "^#" && PREFIX="#"
             
             NEW_LINE="${PREFIX}dhcp-range=interface:$IF,$START,$END,$MASK,$LEASE"
+            
+            # Validació final al backend
+            if ! is_same_subnet "$START" "$END" "$MASK"; then
+                echo "ERROR: IPs must be in the same subnet ($MASK)"
+                exit 1
+            fi
+
             sed -i "s|$CURR_LINE|$NEW_LINE|" /etc/dnsmasq.conf
             
             if [ $IS_ACTIVE -eq 1 ]; then
