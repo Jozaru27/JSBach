@@ -45,19 +45,64 @@ case "$COMANDO" in
         START=$3
         END=$4
         
-        CURR_LINE=$(grep "dhcp-range=interface:$IF," /etc/dnsmasq.conf)
+        # Comprovar si està actiu per reiniciar després
+        IS_ACTIVE=0
+        if systemctl is-active --quiet dnsmasq; then IS_ACTIVE=1; fi
+
+        CURR_LINE=$(grep "^dhcp-range=interface:$IF," /etc/dnsmasq.conf | head -n 1)
+        if [ -z "$CURR_LINE" ]; then
+            # Potser està comentat
+            CURR_LINE=$(grep "^#dhcp-range=interface:$IF," /etc/dnsmasq.conf | head -n 1)
+        fi
+
         if [ -n "$CURR_LINE" ]; then
-            MASK=$(echo $CURR_LINE | cut -d',' -f4)
-            LEASE=$(echo $CURR_LINE | cut -d',' -f5)
-            NEW_LINE="dhcp-range=interface:$IF,$START,$END,$MASK,$LEASE"
+            MASK=$(echo "$CURR_LINE" | cut -d',' -f4)
+            LEASE=$(echo "$CURR_LINE" | cut -d',' -f5)
+            
+            # Conservar l'estat de comentat si ho estava
+            PREFIX=""
+            echo "$CURR_LINE" | grep -q "^#" && PREFIX="#"
+            
+            NEW_LINE="${PREFIX}dhcp-range=interface:$IF,$START,$END,$MASK,$LEASE"
             sed -i "s|$CURR_LINE|$NEW_LINE|" /etc/dnsmasq.conf
             
-            if systemctl is-active --quiet dnsmasq; then
-                systemctl restart dnsmasq
+            if [ $IS_ACTIVE -eq 1 ]; then
+                systemctl stop dnsmasq > /dev/null 2>&1
+                systemctl start dnsmasq > /dev/null 2>&1
             fi
             echo "OK"
         else
             echo "ERROR: Interface not found"
+        fi
+        ;;
+    toggle_range)
+        # Arguments: interface
+        IF=$2
+        
+        IS_ACTIVE=0
+        if systemctl is-active --quiet dnsmasq; then IS_ACTIVE=1; fi
+
+        # Buscar la línia (activa o comentada)
+        LINE=$(grep -E "^#?dhcp-range=interface:$IF," /etc/dnsmasq.conf | head -n 1)
+        
+        if [ -n "$LINE" ]; then
+            if echo "$LINE" | grep -q "^#"; then
+                # Activar: treure el #
+                NEW_LINE=$(echo "$LINE" | sed 's/^#//')
+            else
+                # Desactivar: posar el #
+                NEW_LINE="#$LINE"
+            fi
+            
+            sed -i "s|$LINE|$NEW_LINE|" /etc/dnsmasq.conf
+            
+            if [ $IS_ACTIVE -eq 1 ]; then
+                systemctl stop dnsmasq > /dev/null 2>&1
+                systemctl start dnsmasq > /dev/null 2>&1
+            fi
+            echo "OK"
+        else
+            echo "ERROR: Interface range not found"
         fi
         ;;
     *)

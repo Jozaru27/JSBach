@@ -6,35 +6,41 @@ source /usr/local/JSBach/conf/variables.conf
 echo "Content-type: text/html; charset=utf-8"
 echo ""
 
+# Function to URL decode
+urldecode() {
+    local data="${1//+/ }"
+    printf '%b' "${data//%/\\x}"
+}
+
 # Handle config saving if POST
 if [ "$REQUEST_METHOD" = "POST" ]; then
     read -r post_data
     
-    # Simple extraction logic for multiple ranges
-    echo "$post_data" | sed 's/&/\n/g' | while read -r line; do
-        key=$(echo "$line" | cut -d'=' -f1)
-        val=$(echo "$line" | cut -d'=' -f2)
-        
-        if [[ $key == range_* ]]; then
-            interface=$(echo "$key" | cut -d'_' -f2)
-            type=$(echo "$key" | cut -d'_' -f3) # start or end
-            
-            # Store values temporarily to send them in one go per interface
-            # Since we iterate lines, we'll store them in a temp file or associative array (if bash 4+)
-            # For simplicity in this shell environment, we send them to backend one by one if they are both there
-            # BUT we prefer sending the whole set. 
-            # Let's just collect all and call a backend command that handles it.
-            if [ "$type" == "start" ]; then
-                # Get the matching end value from the same post_data
-                end_val=$(echo "$post_data" | sed -n "s/^.*range_${interface}_end=\([^&]*\).*$/\1/p")
-                
-                # Send to backend
-                "$DIR"/"$PROJECTE"/"$DIR_SCRIPTS"/client_srv_cli dhcp "save_config_range" "$interface" "$val" "$end_val" > /dev/null
-            fi
-        fi
-    done
+    action=$(echo "$post_data" | sed -n 's/^.*action=\([^&]*\).*$/\1/p')
     
-    echo "<html><head><script>alert('Configuració DHCP guardada i servei reiniciat'); window.location.href='/cgi-bin/dhcp.cgi?comand=configuracio';</script></head><body></body></html>"
+    if [ "$action" == "toggle" ]; then
+        interface=$(echo "$post_data" | sed -n 's/^.*interface=\([^&]*\).*$/\1/p')
+        if_dec=$(urldecode "$interface")
+        "$DIR"/"$PROJECTE"/"$DIR_SCRIPTS"/client_srv_cli dhcp "toggle_range" "$if_dec" > /dev/null
+        MSG="Estat del rang DHCP canviat"
+    else
+        # Collect all and apply
+        echo "$post_data" | sed 's/&/\n/g' | grep "_start=" | while read -r line; do
+            key=$(echo "$line" | cut -d'=' -f1)
+            val=$(echo "$line" | cut -d'=' -f2)
+            ifname=$(echo "$key" | cut -d'_' -f2)
+            ifname_dec=$(urldecode "$ifname")
+            
+            end_val=$(echo "$post_data" | sed -n "s/^.*range_${ifname}_end=\([^&]*\).*$/\1/p")
+            val_dec=$(urldecode "$val")
+            end_dec=$(urldecode "$end_val")
+            
+            "$DIR"/"$PROJECTE"/"$DIR_SCRIPTS"/client_srv_cli dhcp "save_config_range" "$ifname_dec" "$val_dec" "$end_dec" > /dev/null
+        done
+        MSG="Configuració DHCP guardada i servei reiniciat"
+    fi
+    
+    echo "<html><head><script>alert('$MSG'); window.location.href='/cgi-bin/dhcp.cgi?comand=configuracio';</script></head><body></body></html>"
     exit 0
 fi
 
@@ -127,45 +133,77 @@ h3 {
 
 table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0 10px;
   margin-top: 10px;
 }
 
-th, td {
+th {
   text-align: left;
-  padding: 12px;
+  padding: 12px 15px;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
+
+td {
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.02);
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+td:first-child { border-left: 1px solid rgba(255, 255, 255, 0.03); border-radius: 12px 0 0 12px; }
+td:last-child { border-right: 1px solid rgba(255, 255, 255, 0.03); border-radius: 0 12px 12px 0; }
 
 input[type="text"] {
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
+  border-radius: 8px;
   color: #fff;
-  padding: 5px;
-  width: 120px;
+  padding: 10px 12px;
+  width: 100%;
+  max-width: 160px;
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+}
+
+input[type="text"]:focus {
+  outline: none;
+  border-color: #3b82f6;
+  background: rgba(15, 23, 42, 0.8);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 
 .btn-save {
-  background: #2563eb;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   color: white;
   border: none;
-  padding: 12px 24px;
-  border-radius: 8px;
+  padding: 16px 32px;
+  border-radius: 12px;
   font-weight: 700;
+  font-size: 1rem;
   cursor: pointer;
-  transition: background 0.2s;
-  margin-top: 20px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
 }
-.btn-save:hover { background: #1d4ed8; }
+
+.btn-save:hover { 
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.4);
+  filter: brightness(1.1);
+}
 
 [style*="font-family: monospace"] {
   background: #020617;
   color: #94a3b8;
-  padding: 20px;
-  border-radius: 10px;
+  padding: 24px;
+  border-radius: 14px;
   white-space: pre-wrap;
   word-break: break-all;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 </style>
 </head>
@@ -180,41 +218,75 @@ if [ "$comand" = "configuracio" ]; then
     </div>
     <div class="card">
       <h3>Configuració de Rangs DHCP</h3>
-      <form method="POST">
+      <form method="POST" id="dhcpForm">
+        <input type="hidden" name="action" value="save" id="formAction">
+        <input type="hidden" name="interface" value="" id="formInterface">
         <table>
           <thead>
             <tr>
               <th>Interfície</th>
-              <th>Inici</th>
-              <th>Final</th>
+              <th>Estat</th>
+              <th>Rang d'Inici</th>
+              <th>Rang Final</th>
               <th>Mascara</th>
-              <th>Temps</th>
+              <th>Temps de lloguer</th>
+              <th style="text-align: right;">Accions</th>
             </tr>
           </thead>
           <tbody>
 EOF
-    # Dynamic parsing of dnsmasq.conf ranges
-    grep "dhcp-range=interface:" /etc/dnsmasq.conf | while read -r line; do
-        ifname=$(echo "$line" | cut -d':' -f2 | cut -d',' -f1)
-        start=$(echo "$line" | cut -d',' -f2)
-        end=$(echo "$line" | cut -d',' -f3)
-        mask=$(echo "$line" | cut -d',' -f4)
-        lease=$(echo "$line" | cut -d',' -f5)
+    # Dynamic parsing of dnsmasq.conf ranges (including commented ones)
+    grep -E "^#?dhcp-range=interface:" /etc/dnsmasq.conf | while read -r line; do
+        is_commented=0
+        echo "$line" | grep -q "^#" && is_commented=1
         
-        echo "<tr>"
+        # Clean line for parsing
+        clean_line=$(echo "$line" | sed 's/^#//')
+        
+        ifname=$(echo "$clean_line" | cut -d':' -f2 | cut -d',' -f1)
+        start=$(echo "$clean_line" | cut -d',' -f2)
+        end=$(echo "$clean_line" | cut -d',' -f3)
+        mask=$(echo "$clean_line" | cut -d',' -f4)
+        lease=$(echo "$clean_line" | cut -d',' -f5)
+        
+        if [ $is_commented -eq 1 ]; then
+            status_badge="<span class='badge badge-red'>INACTIU</span>"
+            toggle_text="<span class='icon'>✅</span> Activar"
+            row_style="opacity: 0.6;"
+        else
+            status_badge="<span class='badge badge-green'>ACTIU</span>"
+            toggle_text="<span class='icon'>🚫</span> Desactivar"
+            row_style=""
+        fi
+
+        echo "<tr style='$row_style'>"
         echo "<td><b>$ifname</b></td>"
+        echo "<td>$status_badge</td>"
         echo "<td><input type='text' name='range_${ifname}_start' value='$start'></td>"
         echo "<td><input type='text' name='range_${ifname}_end' value='$end'></td>"
         echo "<td>$mask</td>"
         echo "<td>$lease</td>"
+        echo "<td style='text-align: right;'>"
+        echo "  <button type='button' class='badge badge-blue' style='cursor:pointer; border:1px solid rgba(59,130,246,0.5); font-family: inherit;' onclick=\"toggleRange('$ifname')\">$toggle_text</button>"
+        echo "</td>"
         echo "</tr>"
     done
     cat << EOF
           </tbody>
         </table>
-        <button type="submit" class="btn-save">💾 Guardar Configuració</button>
+        <div style="margin-top: 30px; display: flex; justify-content: flex-end;">
+            <button type="submit" class="btn-save">💾 Guardar Totes les Config d'Interfície</button>
+        </div>
       </form>
     </div>
+    
+    <script>
+    function toggleRange(ifname) {
+        document.getElementById('formAction').value = 'toggle';
+        document.getElementById('formInterface').value = ifname;
+        document.getElementById('dhcpForm').submit();
+    }
+    </script>
 EOF
 else
     cat << EOF

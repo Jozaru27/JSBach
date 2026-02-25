@@ -18,14 +18,26 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     ssid=$(echo "$post_data" | sed -n 's/^.*ssid=\([^&]*\).*$/\1/p')
     passphrase=$(echo "$post_data" | sed -n 's/^.*passphrase=\([^&]*\).*$/\1/p')
     channel=$(echo "$post_data" | sed -n 's/^.*channel=\([^&]*\).*$/\1/p')
+    hw_mode=$(echo "$post_data" | sed -n 's/^.*hw_mode=\([^&]*\).*$/\1/p')
+    ieee=$(echo "$post_data" | sed -n 's/^.*ieee=\([^&]*\).*$/\1/p')
+    wmm=$(echo "$post_data" | sed -n 's/^.*wmm=\([^&]*\).*$/\1/p')
+    interface=$(echo "$post_data" | sed -n 's/^.*interface=\([^&]*\).*$/\1/p')
+    auth_algs=$(echo "$post_data" | sed -n 's/^.*auth_algs=\([^&]*\).*$/\1/p')
+    wpa_ver=$(echo "$post_data" | sed -n 's/^.*wpa_ver=\([^&]*\).*$/\1/p')
+    key_mgmt=$(echo "$post_data" | sed -n 's/^.*key_mgmt=\([^&]*\).*$/\1/p')
+    rsn_pairwise=$(echo "$post_data" | sed -n 's/^.*rsn_pairwise=\([^&]*\).*$/\1/p')
     
-    # Decode
+    # Decode strings
     ssid_dec=$(urldecode "$ssid")
     pass_dec=$(urldecode "$passphrase")
+    if_dec=$(urldecode "$interface")
+    kmgmt_dec=$(urldecode "$key_mgmt")
+    rsn_dec=$(urldecode "$rsn_pairwise")
     
     # Send to backend via client_srv_cli
-    # Use quotes for arguments with spaces
-    "$DIR"/"$PROJECTE"/"$DIR_SCRIPTS"/client_srv_cli wifi "save_config" "$ssid_dec" "$pass_dec" "$channel" > /dev/null
+    "$DIR"/"$PROJECTE"/"$DIR_SCRIPTS"/client_srv_cli wifi "save_config" \
+        "$ssid_dec" "$pass_dec" "$channel" "$hw_mode" "$ieee" "$wmm" \
+        "$if_dec" "$auth_algs" "$wpa_ver" "$kmgmt_dec" "$rsn_dec" > /dev/null
     
     echo "<html><head><script>alert('Configuració guardada i servei reiniciat'); window.location.href='/cgi-bin/wifi.cgi?comand=configuracio';</script></head><body></body></html>"
     exit 0
@@ -118,36 +130,80 @@ h3 {
 .badge-red { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
 .badge-blue { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
 
-.form-group { margin-bottom: 20px; }
-label { display: block; margin-bottom: 8px; font-weight: 600; color: #94a3b8; }
-input[type="text"], input[type="password"], select {
+.form-group { margin-bottom: 25px; }
+label { display: block; margin-bottom: 10px; font-weight: 600; color: #94a3b8; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.5px; }
+
+input[type="text"], 
+input[type="password"], 
+input[type="number"],
+select {
   width: 100%;
-  padding: 12px;
+  padding: 14px 16px;
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  border-radius: 10px;
   color: #fff;
   font-size: 1rem;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
 }
+
+input:focus, select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  background: rgba(15, 23, 42, 0.8);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+/* Millora específica per a inputs numèrics */
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 .btn-save {
-  background: #2563eb;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   color: white;
   border: none;
-  padding: 12px 24px;
-  border-radius: 8px;
+  padding: 16px 32px;
+  border-radius: 12px;
   font-weight: 700;
+  font-size: 1rem;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+  width: 100%;
 }
-.btn-save:hover { background: #1d4ed8; }
+
+.btn-save:hover { 
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.4);
+  filter: brightness(1.1);
+}
+
+.btn-save:active {
+  transform: translateY(0);
+}
+
+.grid-config {
+  display: grid; 
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
+  gap: 25px;
+}
 
 [style*="font-family: monospace"] {
   background: #020617;
   color: #94a3b8;
-  padding: 20px;
-  border-radius: 10px;
+  padding: 24px;
+  border-radius: 14px;
   white-space: pre-wrap;
   word-break: break-all;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 </style>
 </head>
@@ -160,6 +216,14 @@ if [ "$comand" = "configuracio" ]; then
     curr_ssid=$(grep "^ssid=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
     curr_pass=$(grep "^wpa_passphrase=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
     curr_chan=$(grep "^channel=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
+    curr_hw=$(grep "^hw_mode=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
+    curr_ieee=$(grep "^ieee80211n=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
+    curr_wmm=$(grep "^wmm_enabled=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
+    curr_if=$(grep "^interface=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
+    curr_auth=$(grep "^auth_algs=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
+    curr_wpa=$(grep "^wpa=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
+    curr_kmgmt=$(grep "^wpa_key_mgmt=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
+    curr_rsn=$(grep "^rsn_pairwise=" /etc/hostapd/hostapd.conf | cut -d'=' -f2)
     
     cat << EOF
     <div class="page-header">
@@ -168,25 +232,65 @@ if [ "$comand" = "configuracio" ]; then
     <div class="card">
       <h3>Configuració del Punt d'Accés</h3>
       <form method="POST">
-        <div class="form-group">
-          <label>SSID (Nom de la xarxa)</label>
-          <input type="text" name="ssid" value="$curr_ssid" required>
+        <div class="grid-config">
+            <div class="form-group">
+                <label>Nom de la interfície (interface)</label>
+                <input type="text" name="interface" value="$curr_if" required>
+            </div>
+            <div class="form-group">
+                <label>SSID (Nom de la xarxa)</label>
+                <input type="text" name="ssid" value="$curr_ssid" required>
+            </div>
+            <div class="form-group">
+                <label>Mode Hardware (hw_mode)</label>
+                <select name="hw_mode">
+                    <option value="g" $( [ "$curr_hw" = "g" ] && echo "selected" )>802.11g (2.4 GHz)</option>
+                    <option value="a" $( [ "$curr_hw" = "a" ] && echo "selected" )>802.11a (5 GHz)</option>
+                    <option value="b" $( [ "$curr_hw" = "b" ] && echo "selected" )>802.11b (Legacy)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>IEEE 802.11n</label>
+                <select name="ieee">
+                    <option value="1" $( [ "$curr_ieee" = "1" ] && echo "selected" )>Activat</option>
+                    <option value="0" $( [ "$curr_ieee" = "0" ] && echo "selected" )>Desactivat</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>WMM (Wireless Multimedia)</label>
+                <select name="wmm">
+                    <option value="1" $( [ "$curr_wmm" = "1" ] && echo "selected" )>Activat</option>
+                    <option value="0" $( [ "$curr_wmm" = "0" ] && echo "selected" )>Desactivat</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Canal</label>
+                <input type="number" name="channel" value="$curr_chan" min="1" max="165" required>
+            </div>
+            <div class="form-group">
+                <label>Auth Algs</label>
+                <input type="number" name="auth_algs" value="$curr_auth" min="1" max="3" required>
+            </div>
+            <div class="form-group">
+                <label>WPA Version</label>
+                <input type="number" name="wpa_ver" value="$curr_wpa" min="1" max="3" required>
+            </div>
+            <div class="form-group">
+                <label>Key Management (wpa_key_mgmt)</label>
+                <input type="text" name="key_mgmt" value="$curr_kmgmt" required>
+            </div>
+            <div class="form-group">
+                <label>RSN Pairwise (Cifratge)</label>
+                <input type="text" name="rsn_pairwise" value="$curr_rsn" required>
+            </div>
+            <div class="form-group" style="grid-column: 1 / -1;">
+                <label>Contrasenya (WPA2)</label>
+                <input type="password" name="passphrase" value="$curr_pass" required>
+            </div>
         </div>
-        <div class="form-group">
-          <label>Contrasenya (WPA2)</label>
-          <input type="password" name="passphrase" value="$curr_pass" required>
+        <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+            <button type="submit" class="btn-save">💾 Guardar Canvis i Reiniciar Servei</button>
         </div>
-        <div class="form-group">
-          <label>Canal</label>
-          <select name="channel">
-            $(for i in {1..11}; do 
-                echo -n "<option value='$i' "
-                [ "$i" = "$curr_chan" ] && echo -n "selected"
-                echo ">Canal $i</option>"
-            done)
-          </select>
-        </div>
-        <button type="submit" class="btn-save">💾 Guardar Canvis</button>
       </form>
     </div>
 EOF

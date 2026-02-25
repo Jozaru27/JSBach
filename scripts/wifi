@@ -7,10 +7,24 @@ COMANDO=$1
 
 case "$COMANDO" in
     iniciar)
+        # Extraure la IP de la porta d'enllaç i la màscara del dnsmasq.conf per a wlp5s0
+        # Format esperat: dhcp-range=interface:wlp5s0,START,END,MASK,LEASE
+        # I opcionalment dhcp-option=interface:wlp5s0,3,GATEWAY
+        
+        GW_IP=$(grep "dhcp-option=interface:wlp5s0,3," /etc/dnsmasq.conf | cut -d',' -f3)
+        MASK=$(grep "dhcp-range=interface:wlp5s0," /etc/dnsmasq.conf | cut -d',' -f4)
+        
+        if [ -n "$GW_IP" ] && [ -n "$MASK" ]; then
+            ip addr flush dev wlp5s0
+            ip addr add $GW_IP/$MASK dev wlp5s0
+            ip link set wlp5s0 up
+            systemctl restart dnsmasq > /dev/null 2>&1
+        fi
+
         systemctl start hostapd > /dev/null 2>&1
         if [ $? -eq 0 ]; then echo "ACTIVAT"; else echo "DESACTIVAT"; fi
         echo "<h3>Resultat de l'operació</h3>"
-        echo "<p>S'ha intentat iniciar el servei hostapd.</p>"
+        echo "<p>S'ha intentat iniciar el servei hostapd i configurar la IP $GW_IP.</p>"
         ;;
     aturar)
         systemctl stop hostapd > /dev/null 2>&1
@@ -38,23 +52,38 @@ case "$COMANDO" in
         echo "</div>"
         ;;
     save_config)
-        # Arguments: ssid passphrase channel
-        SSID=$2
-        PASS=$3
-        CHAN=$4
+        # Arguments: ssid pass chan hw_mode ieee wmm interface auth_algs wpa key_mgmt rsn
+        SSID=$2; PASS=$3; CHAN=$4; HW=$5; IEEE=$6; WMM=$7; IF=$8; AUTH=$9; WPA=${10}; KMGMT=${11}; RSN=${12}
         
-        if [ -n "$SSID" ]; then
-            sed -i "s/^ssid=.*/ssid=$SSID/" /etc/hostapd/hostapd.conf
-        fi
-        if [ -n "$PASS" ]; then
-            sed -i "s/^wpa_passphrase=.*/wpa_passphrase=$PASS/" /etc/hostapd/hostapd.conf
-        fi
-        if [ -n "$CHAN" ]; then
-            sed -i "s/^channel=.*/channel=$CHAN/" /etc/hostapd/hostapd.conf
-        fi
+        # Comprovar si està actiu per reiniciar després
+        IS_ACTIVE=0
+        if systemctl is-active --quiet hostapd; then IS_ACTIVE=1; fi
         
-        if systemctl is-active --quiet hostapd; then
-            systemctl restart hostapd
+        if [ $IS_ACTIVE -eq 1 ]; then systemctl stop hostapd > /dev/null 2>&1; fi
+
+        # Assegurar que les claus existeixen al fitxer (per si ieee80211n o d'altres no hi són)
+        for key in ssid wpa_passphrase channel hw_mode ieee80211n wmm_enabled interface auth_algs wpa wpa_key_mgmt rsn_pairwise; do
+            grep -q "^$key=" /etc/hostapd/hostapd.conf || echo "$key=" >> /etc/hostapd/hostapd.conf
+        done
+
+        [ -n "$SSID" ] && sed -i "s|^ssid=.*|ssid=$SSID|" /etc/hostapd/hostapd.conf
+        [ -n "$PASS" ] && sed -i "s|^wpa_passphrase=.*|wpa_passphrase=$PASS|" /etc/hostapd/hostapd.conf
+        [ -n "$CHAN" ] && sed -i "s|^channel=.*|channel=$CHAN|" /etc/hostapd/hostapd.conf
+        [ -n "$HW" ]   && sed -i "s|^hw_mode=.*|hw_mode=$HW|" /etc/hostapd/hostapd.conf
+        [ -n "$IEEE" ] && sed -i "s|^ieee80211n=.*|ieee80211n=$IEEE|" /etc/hostapd/hostapd.conf
+        [ -n "$WMM" ]  && sed -i "s|^wmm_enabled=.*|wmm_enabled=$WMM|" /etc/hostapd/hostapd.conf
+        [ -n "$IF" ]   && sed -i "s|^interface=.*|interface=$IF|" /etc/hostapd/hostapd.conf
+        [ -n "$AUTH" ] && sed -i "s|^auth_algs=.*|auth_algs=$AUTH|" /etc/hostapd/hostapd.conf
+        [ -n "$WPA" ]  && sed -i "s|^wpa=.*|wpa=$WPA|" /etc/hostapd/hostapd.conf
+        [ -n "$KMGMT" ] && sed -i "s|^wpa_key_mgmt=.*|wpa_key_mgmt=$KMGMT|" /etc/hostapd/hostapd.conf
+        [ -n "$RSN" ]   && sed -i "s|^rsn_pairwise=.*|rsn_pairwise=$RSN|" /etc/hostapd/hostapd.conf
+
+        if [ $IS_ACTIVE -eq 1 ]; then 
+            # Si hem canviat la interfície, potser cal fer el up a la nova
+            if [ -n "$IF" ]; then
+                 ip link set "$IF" up > /dev/null 2>&1
+            fi
+            systemctl start hostapd > /dev/null 2>&1
         fi
         echo "OK"
         ;;
