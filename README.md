@@ -44,3 +44,15 @@ Gestión de IP, enrutamiento, bridge, firewall, DMZ, switch,...
 - Gestión de Switches
 - Restricciones de MAC mediante ACL
 - Privilegios de MAC mediante ACL
+
+---
+
+## WIFI
+
+- Gestión de interfaz WIFI
+
+---
+
+## DHCP
+
+- Gestión de rangos de IP y habilitación/deshabilitación de interfaces

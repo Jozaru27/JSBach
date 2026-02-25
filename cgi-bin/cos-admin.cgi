@@ -113,6 +113,18 @@ body {
   font-size: 0.65rem;
   color: #475569;
 }
+
+.footer a {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.footer a:hover {
+  color: #60a5fa;
+  text-decoration: underline;
+}
+
 </style>
 </head>
 <body>
@@ -154,7 +166,7 @@ body {
 
   <div class="footer">
     v2.1.0-stable<br>
-    © 2026 Jozaru
+    © 2026 <a href="https://github.com/Jozaru27/JSBach" target="_blank" rel="noopener noreferrer">Jozaru</a>
   </div>
 </div>
 
