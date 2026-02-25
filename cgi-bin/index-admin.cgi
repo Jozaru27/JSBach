@@ -149,6 +149,8 @@ cat << EOF
         <div id="btn-tallafocs" onclick="loadModule('/cgi-bin/tallafocs-menu.cgi', '/cgi-bin/tallafocs-configuracio.cgi', 'btn-tallafocs')" class="nav-btn">🛡️ Tallafocs</div>
         <div id="btn-dmz" onclick="loadModule('/cgi-bin/dmz-menu.cgi', '/cgi-bin/dmz-configurar.cgi', 'btn-dmz')" class="nav-btn">🔓 DMZ</div>
         <div id="btn-switch" onclick="loadModule('/cgi-bin/switch-menu.cgi', '/cgi-bin/switch.cgi?comand=estat', 'btn-switch')" class="nav-btn">🔌 Switch</div>
+        <div id="btn-wifi" onclick="loadModule('/cgi-bin/wifi-menu.cgi', '/cgi-bin/wifi.cgi?comand=estat', 'btn-wifi')" class="nav-btn">📶 Wifi</div>
+        <div id="btn-dhcp" onclick="loadModule('/cgi-bin/dhcp-menu.cgi', '/cgi-bin/dhcp.cgi?comand=estat', 'btn-dhcp')" class="nav-btn">🔌 DHCP</div>
       </div>
     </div>
   </div>

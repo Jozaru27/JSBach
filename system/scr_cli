@@ -5,10 +5,14 @@ source /usr/local/JSBach/conf/variables.conf
 
 while read ordre
 do
-	if [[ -n $ordre ]] then
+	if [[ -n $ordre ]]; then
+		ordre=$(echo "$ordre" | tr -d '\r')
 		
 		Comando=$(echo $ordre| awk '{print $1}') 
 		Arguments=$(echo $ordre| awk '{for (i=2; i<=NF; ++i)  printf $i " " }') 
+		
+		# Debug logging
+		echo "Recibido: [$ordre] | Comando: [$Comando] | Args: [$Arguments]" >> /tmp/scr_cli.log
 				
 		case "$Comando" in
 			"enrutar")  
@@ -26,6 +30,12 @@ do
 			"dmz")
 			    $DIR/$PROJECTE/$DIR_SCRIPTS/dmz $Arguments
 			    ;;	
+			"wifi")
+			    $DIR/$PROJECTE/$DIR_SCRIPTS/wifi $Arguments
+			    ;;
+			"dhcp")
+			    $DIR/$PROJECTE/$DIR_SCRIPTS/dhcp $Arguments
+			    ;;
 			*) 
 			    echo "CLI Error en l'argument $Comando $Arguments"
 			    ;;

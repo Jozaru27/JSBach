@@ -1,0 +1,66 @@
+#!/bin/bash
+
+# JSBach Router - WIFI Backend Logic
+source /usr/local/JSBach/conf/variables.conf
+
+COMANDO=$1
+
+case "$COMANDO" in
+    iniciar)
+        systemctl start hostapd > /dev/null 2>&1
+        if [ $? -eq 0 ]; then echo "ACTIVAT"; else echo "DESACTIVAT"; fi
+        echo "<h3>Resultat de l'operació</h3>"
+        echo "<p>S'ha intentat iniciar el servei hostapd.</p>"
+        ;;
+    aturar)
+        systemctl stop hostapd > /dev/null 2>&1
+        echo "DESACTIVAT"
+        echo "<h3>Resultat de l'operació</h3>"
+        echo "<p>S'ha aturat el servei hostapd.</p>"
+        ;;
+    estat)
+        if systemctl is-active --quiet hostapd; then
+            echo "ACTIVAT"
+        else
+            echo "DESACTIVAT"
+        fi
+        
+        echo "<h3>Estat del Servei Hostapd</h3>"
+        echo "<div style='font-family: monospace;'>"
+        systemctl status hostapd | head -n 15
+        echo "</div>"
+        
+        echo "<h3>Informació de la Interfície wlp5s0</h3>"
+        echo "<div style='font-family: monospace;'>"
+        iw dev wlp5s0 info 2>/dev/null
+        echo "<br>"
+        iw dev wlp5s0 link 2>/dev/null
+        echo "</div>"
+        ;;
+    save_config)
+        # Arguments: ssid passphrase channel
+        SSID=$2
+        PASS=$3
+        CHAN=$4
+        
+        if [ -n "$SSID" ]; then
+            sed -i "s/^ssid=.*/ssid=$SSID/" /etc/hostapd/hostapd.conf
+        fi
+        if [ -n "$PASS" ]; then
+            sed -i "s/^wpa_passphrase=.*/wpa_passphrase=$PASS/" /etc/hostapd/hostapd.conf
+        fi
+        if [ -n "$CHAN" ]; then
+            sed -i "s/^channel=.*/channel=$CHAN/" /etc/hostapd/hostapd.conf
+        fi
+        
+        if systemctl is-active --quiet hostapd; then
+            systemctl restart hostapd
+        fi
+        echo "OK"
+        ;;
+    *)
+        echo "DESACTIVAT"
+        echo "<h3>Error</h3>"
+        echo "<p>Ordre no reconeguda: $COMANDO</p>"
+        ;;
+esac

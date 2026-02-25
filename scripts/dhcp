@@ -1,0 +1,68 @@
+#!/bin/bash
+
+# JSBach Router - DHCP Backend Logic
+source /usr/local/JSBach/conf/variables.conf
+
+COMANDO=$1
+
+case "$COMANDO" in
+    iniciar)
+        systemctl start dnsmasq > /dev/null 2>&1
+        if [ $? -eq 0 ]; then echo "ACTIVAT"; else echo "DESACTIVAT"; fi
+        echo "<h3>Resultat de l'operació</h3>"
+        echo "<p>S'ha intentat iniciar el servei dnsmasq.</p>"
+        ;;
+    aturar)
+        systemctl stop dnsmasq > /dev/null 2>&1
+        echo "DESACTIVAT"
+        echo "<h3>Resultat de l'operació</h3>"
+        echo "<p>S'ha aturat el servei dnsmasq.</p>"
+        ;;
+    estat)
+        if systemctl is-active --quiet dnsmasq; then
+            echo "ACTIVAT"
+        else
+            echo "DESACTIVAT"
+        fi
+        
+        echo "<h3>Estat del Servei DNSMasq</h3>"
+        echo "<div style='font-family: monospace;'>"
+        systemctl status dnsmasq | head -n 15
+        echo "</div>"
+        
+        echo "<h3>Clientes DHCP Actius</h3>"
+        echo "<div style='font-family: monospace;'>"
+        if [ -f /var/lib/misc/dnsmasq.leases ]; then
+            cat /var/lib/misc/dnsmasq.leases
+        else
+            echo "No hi ha lloguers DHCP actius."
+        fi
+        echo "</div>"
+        ;;
+    save_config_range)
+        # Arguments: interface start end
+        IF=$2
+        START=$3
+        END=$4
+        
+        CURR_LINE=$(grep "dhcp-range=interface:$IF," /etc/dnsmasq.conf)
+        if [ -n "$CURR_LINE" ]; then
+            MASK=$(echo $CURR_LINE | cut -d',' -f4)
+            LEASE=$(echo $CURR_LINE | cut -d',' -f5)
+            NEW_LINE="dhcp-range=interface:$IF,$START,$END,$MASK,$LEASE"
+            sed -i "s|$CURR_LINE|$NEW_LINE|" /etc/dnsmasq.conf
+            
+            if systemctl is-active --quiet dnsmasq; then
+                systemctl restart dnsmasq
+            fi
+            echo "OK"
+        else
+            echo "ERROR: Interface not found"
+        fi
+        ;;
+    *)
+        echo "DESACTIVAT"
+        echo "<h3>Error</h3>"
+        echo "<p>Ordre no reconeguda: $COMANDO</p>"
+        ;;
+esac
