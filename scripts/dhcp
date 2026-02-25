@@ -34,8 +34,45 @@ is_same_subnet() {
     [ "$(( ip1 >> shift ))" -eq "$(( ip2 >> shift ))" ]
 }
 
+# Helper: Check if required interfaces for DHCP are UP
+check_interfaces() {
+    local bridge_down=0
+    local wifi_down=0
+    
+    # Find all active (not commented) dhcp-range interfaces
+    local ifs=$(grep "^dhcp-range=interface:" /etc/dnsmasq.conf | cut -d':' -f2 | cut -d',' -f1)
+    
+    for iface in $ifs; do
+        # Check if interface exists and is UP (state UP)
+        # Note: some bridges might be UNKNOWN if no members, so we check for grep "state UP" or "state UNKNOWN"
+        if ! ip addr show "$iface" 2>/dev/null | grep -E -q "state (UP|UNKNOWN)"; then
+            if [[ "$iface" == br* ]]; then bridge_down=1; fi
+            if [[ "$iface" == wlp* ]]; then wifi_down=1; fi
+        fi
+    done
+    
+    if [ $bridge_down -eq 1 ] && [ $wifi_down -eq 1 ]; then
+        echo "Activa Bridge, Activa WiFi"
+        return 1
+    elif [ $bridge_down -eq 1 ]; then
+        echo "Activa Bridge"
+        return 1
+    elif [ $wifi_down -eq 1 ]; then
+        echo "Activa WiFi"
+        return 1
+    fi
+    return 0
+}
+
 case "$COMANDO" in
     iniciar)
+        MSG_ERROR=$(check_interfaces)
+        if [ $? -ne 0 ]; then
+            echo "DESACTIVAT"
+            echo "<h3>Error d'Inici</h3>"
+            echo "<p>No s'ha pogut iniciar el DHCP. <b>$MSG_ERROR</b>.</p>"
+            exit 1
+        fi
         systemctl start dnsmasq > /dev/null 2>&1
         if [ $? -eq 0 ]; then echo "ACTIVAT"; else echo "DESACTIVAT"; fi
         echo "<h3>Resultat de l'operació</h3>"
@@ -141,8 +178,14 @@ case "$COMANDO" in
         ;;
     restart_if_active)
         if systemctl is-active --quiet dnsmasq; then
-            systemctl restart dnsmasq > /dev/null 2>&1
-            echo "RESTARTED"
+            if check_interfaces > /dev/null 2>&1; then
+                systemctl restart dnsmasq > /dev/null 2>&1
+                echo "RESTARTED"
+            else
+                # If it was active but interfaces are now missing, we might want to stop it
+                # to avoid a broken loop, but for now we'll just not restart.
+                echo "STAYED_OFF_MISSING_IF"
+            fi
         else
             echo "STAYED_OFF"
         fi
