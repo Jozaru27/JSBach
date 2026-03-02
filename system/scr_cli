@@ -36,6 +36,9 @@ do
 			"dhcp")
 			    $DIR/$PROJECTE/$DIR_SCRIPTS/dhcp $Arguments
 			    ;;
+			"portal_captiu")
+			    $DIR/$PROJECTE/$DIR_SCRIPTS/portal_captiu.sh $Arguments
+			    ;;
 			*) 
 			    echo "CLI Error en l'argument $Comando $Arguments"
 			    ;;

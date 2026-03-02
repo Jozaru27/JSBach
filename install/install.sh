@@ -21,9 +21,9 @@ echo "📦 Instal·lant dependències del sistema..."
 apt update
 apt install -y apache2 curl net-tools expect iw ebtables iptables bridge-utils ncat sed grep dnsmasq hostapd
 
-# 4. Configuració d'Apache (CGI)
+# 4. Configuració d'Apache (CGI i Rewrite)
 echo "🌐 Configurant el servidor web Apache..."
-a2enmod cgi
+a2enmod cgi rewrite
 systemctl restart apache2
 
 # 5. Desactivació de NetworkManager
@@ -183,7 +183,87 @@ systemctl unmask hostapd
 systemctl enable hostapd
 systemctl restart hostapd
 
-# 10. Configuració de permisos massiva
+# 10. Configuració del Portal Captiu
+echo "🌐 Configurant el Portal Captiu..."
+
+# Assegurar variable en variables.conf
+if ! grep -q "PORTAL_CAPTIU_CONF" "$PROJECT_DIR/conf/variables.conf"; then
+    echo "PORTAL_CAPTIU_CONF=portal_captiu.conf" >> "$PROJECT_DIR/conf/variables.conf"
+fi
+
+# Crear fitxer de configuració del portal si no existeix
+if [ ! -f "$PROJECT_DIR/conf/portal_captiu.conf" ]; then
+    echo "admin;admin123;DESACTIVAT;" > "$PROJECT_DIR/conf/portal_captiu.conf"
+fi
+
+# Configuració Sudoers per a www-data (permet executar el script del portal)
+SUDOERS_FILE="/etc/sudoers.d/jsbach-portal"
+echo "www-data ALL=(ALL) NOPASSWD: $PROJECT_DIR/scripts/portal_captiu.sh" > "$SUDOERS_FILE"
+chmod 440 "$SUDOERS_FILE"
+
+# Generar fitxers de llocs d'Apache
+cat << EOF > /etc/apache2/sites-available/wifi.conf
+<VirtualHost 10.0.100.1:80>
+    ServerName 10.0.100.1
+    DocumentRoot $PROJECT_DIR/portal_captiu
+    <Directory $PROJECT_DIR/portal_captiu>
+        Options +ExecCGI -Indexes +FollowSymLinks
+        AllowOverride None
+        Require all granted
+    </Directory>
+    ScriptAlias /cgi-bin/ $PROJECT_DIR/cgi-bin/
+    <Directory $PROJECT_DIR/cgi-bin>
+        Options +ExecCGI
+        AddHandler cgi-script .cgi
+        Require all granted
+    </Directory>
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} ^/validacio\.html$ [NC]
+    RewriteRule ^ - [L]
+    RewriteCond %{REQUEST_URI} ^/cgi-bin/validacio\.cgi$ [NC]
+    RewriteRule ^ - [L]
+    RewriteRule ^.*$ /validacio.html [R=302,L]
+    ErrorLog \${APACHE_LOG_DIR}/portal_captiu_error.log
+    CustomLog \${APACHE_LOG_DIR}/portal_captiu_access.log combined
+</VirtualHost>
+EOF
+
+cat << EOF > /etc/apache2/sites-available/vlan3.conf
+<VirtualHost 10.0.3.1:80>
+    ServerName 10.0.3.1
+    DocumentRoot $PROJECT_DIR/portal_captiu
+    <Directory $PROJECT_DIR/portal_captiu>
+        Options +ExecCGI -Indexes +FollowSymLinks
+        AllowOverride None
+        Require all granted
+    </Directory>
+    ScriptAlias /cgi-bin/ $PROJECT_DIR/cgi-bin/
+    <Directory $PROJECT_DIR/cgi-bin>
+        Options +ExecCGI
+        AddHandler cgi-script .cgi
+        Require all granted
+    </Directory>
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} ^/validacio\.html$ [NC]
+    RewriteRule ^ - [L]
+    RewriteCond %{REQUEST_URI} ^/cgi-bin/validacio\.cgi$ [NC]
+    RewriteRule ^ - [L]
+    RewriteRule ^.*$ /validacio.html [R=302,L]
+    ErrorLog \${APACHE_LOG_DIR}/portal_captiu_error.log
+    CustomLog \${APACHE_LOG_DIR}/portal_captiu_access.log combined
+</VirtualHost>
+EOF
+
+# Activar els llocs d'Apache
+a2ensite wifi.conf vlan3.conf
+systemctl restart apache2
+
+# Iniciar les regles d'iptables del portal
+if [ -f "$PROJECT_DIR/scripts/portal_captiu.sh" ]; then
+    bash "$PROJECT_DIR/scripts/portal_captiu.sh" iniciar
+fi
+
+# 11. Configuració de permisos massiva
 echo "🔑 Configurant permisos i propietats del projecte..."
 chown -R www-data:www-data "$PROJECT_DIR"
 # Permisos d'execució totals per a scripts i CGIs

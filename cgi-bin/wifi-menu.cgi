@@ -61,6 +61,7 @@ a:hover {
   <a href="/cgi-bin/wifi.cgi?comand=aturar" target="body"><span class="icon">🛑</span> Aturar WIFI</a>
   <a href="/cgi-bin/wifi.cgi?comand=estat" target="body"><span class="icon">📊</span> Estat WIFI</a>
   <a href="/cgi-bin/wifi.cgi?comand=configuracio" target="body"><span class="icon">⚙️</span> Configurar WIFI</a>
+  <a href="/cgi-bin/portal_captiu.cgi" target="body"><span class="icon">🌐</span> Portal Captiu</a>
 
   <div style="margin-top: 30px; padding: 10px; border-top: 1px solid rgba(255,255,255,0.05);">
     <a href="/cgi-bin/cos-admin.cgi" style="font-size: 0.8rem; opacity: 0.7;">⬅️ Tornar</a>
