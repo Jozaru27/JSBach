@@ -39,6 +39,9 @@ do
 			"portal_captiu")
 			    $DIR/$PROJECTE/$DIR_SCRIPTS/portal_captiu.sh $Arguments
 			    ;;
+			"switch-scripts.sh")
+			    $DIR/$PROJECTE/$DIR_SCRIPTS/switch-scripts.sh $Arguments
+			    ;;
 			*) 
 			    echo "CLI Error en l'argument $Comando $Arguments"
 			    ;;

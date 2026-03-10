@@ -20,9 +20,9 @@ get_admin_macs() {
 
 if [ "$REQUEST_METHOD" = "POST" ]; then
     read -n $CONTENT_LENGTH POST_DATA
-    get_val() { echo "$POST_DATA" | grep -oP "(?<=&|^)$1=.*?(?=&|$)" | cut -d= -f2 | sed 's/+/ /g' | perl -pe 's/%([0-9a-f]{2})/chr(hex($1))/eig'; }
+    get_val() { echo "$POST_DATA" | grep -oP "(?<=&|^)$1=.*?(?=&|$)" | cut -d= -f2 | sed 's/+/ /g' | perl -pe 's/%([0-9a-f]{2})/chr(hex($1))/eig' | tr -d '\r\n'; }
 else
-    get_val() { echo "$QUERY_STRING" | grep -oP "(?<=&|^)$1=.*?(?=&|$)" | cut -d= -f2 | sed 's/+/ /g' | perl -pe 's/%([0-9a-f]{2})/chr(hex($1))/eig'; }
+    get_val() { echo "$QUERY_STRING" | grep -oP "(?<=&|^)$1=.*?(?=&|$)" | cut -d= -f2 | sed 's/+/ /g' | perl -pe 's/%([0-9a-f]{2})/chr(hex($1))/eig' | tr -d '\r\n'; }
 fi
 
 comand=$(get_val comand)
@@ -224,25 +224,25 @@ case $comand in
         exit 0 ;;
 
     add_m)
-        /usr/local/JSBach/scripts/switch-scripts.sh configurar afegir_mac "$(get_val mac)" "$(get_val vlan)" >/dev/null 2>&1
+        /usr/local/JSBach/scripts/client_srv_cli switch-scripts.sh configurar afegir_mac "$(get_val mac)" "$(get_val vlan)" >/dev/null 2>&1
         echo "Status: 302 Found"
         echo "Location: /cgi-bin/switch.cgi?comand=gestion_mac"
         echo ""
         exit 0 ;;
     add_admin_m)
-        /usr/local/JSBach/scripts/switch-scripts.sh configurar afegir_mac_admin "$(get_val mac)" >/dev/null 2>&1
+        /usr/local/JSBach/scripts/client_srv_cli switch-scripts.sh configurar afegir_mac_admin "$(get_val mac)" >/dev/null 2>&1
         echo "Status: 302 Found"
         echo "Location: /cgi-bin/switch.cgi?comand=gestion_admin"
         echo ""
         exit 0 ;;
     del_m)
-        /usr/local/JSBach/scripts/switch-scripts.sh configurar eliminar_mac "$(get_val mac)" >/dev/null 2>&1
+        /usr/local/JSBach/scripts/client_srv_cli switch-scripts.sh configurar eliminar_mac "$(get_val mac)" >/dev/null 2>&1
         echo "Status: 302 Found"
         echo "Location: /cgi-bin/switch.cgi?comand=gestion_mac"
         echo ""
         exit 0 ;;
     del_admin_m)
-        /usr/local/JSBach/scripts/switch-scripts.sh configurar eliminar_mac_admin "$(get_val mac)" >/dev/null 2>&1
+        /usr/local/JSBach/scripts/client_srv_cli switch-scripts.sh configurar eliminar_mac_admin "$(get_val mac)" >/dev/null 2>&1
         echo "Status: 302 Found"
         echo "Location: /cgi-bin/switch.cgi?comand=gestion_admin"
         echo ""
@@ -274,13 +274,13 @@ case $comand in
         echo "</tbody></table></div>"
         print_footer ;;
     save_s)
-        /usr/local/JSBach/scripts/switch-scripts.sh configurar afegir_switch "$(get_val n)" "$(get_val i)" "$(get_val u)" "$(get_val p)" "$(get_val pr)" >/dev/null 2>&1
+        /usr/local/JSBach/scripts/client_srv_cli switch-scripts.sh configurar afegir_switch "$(get_val n)" "$(get_val i)" "$(get_val u)" "$(get_val p)" "$(get_val pr)" >/dev/null 2>&1
         echo "Status: 302 Found"
         echo "Location: /cgi-bin/switch.cgi?comand=configurar"
         echo ""
         exit 0 ;;
     del_s)
-        /usr/local/JSBach/scripts/switch-scripts.sh configurar eliminar_switch "$(get_val ip)" >/dev/null 2>&1
+        /usr/local/JSBach/scripts/client_srv_cli switch-scripts.sh configurar eliminar_switch "$(get_val ip)" >/dev/null 2>&1
         echo "Status: 302 Found"
         echo "Location: /cgi-bin/switch.cgi?comand=configurar"
         echo ""

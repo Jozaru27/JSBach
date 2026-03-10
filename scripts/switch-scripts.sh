@@ -398,7 +398,7 @@ fnc_configurar() {
             chmod 666 "$SW_CONF_FILE"
 			;;
         afegir_mac)
-            local mac=$1
+            local mac=$(echo "$1" | tr -d '[:space:]')
             local vlan=$2
             if ! validar_mac "$mac"; then echo "❌ ERROR: MAC invàlida"; exit 1; fi
             
@@ -414,7 +414,7 @@ fnc_configurar() {
             ;;
 
         eliminar_mac)
-            local mac=$1
+            local mac=$(echo "$1" | tr -d '[:space:]')
             # Escapar caracteres especiales para grep
             local safe_mac=$(echo "$mac" | sed 's/;/\\;/g')
             # Borrar líneas que empiecen con la MAC (ignorando si tienen ;VLAN o no)
@@ -447,7 +447,7 @@ EOF
             chmod 666 "/tmp/acl_status.tmp"
             ;;
         afegir_mac_admin)
-            local mac=$1
+            local mac=$(echo "$1" | tr -d '[:space:]')
             if ! validar_mac "$mac"; then echo "❌ ERROR: MAC invàlida"; exit 1; fi
             if ! grep -qix "^$mac$" "$MAC_ADMIN_FILE"; then
                 echo "$mac" >> "$MAC_ADMIN_FILE"
@@ -458,7 +458,7 @@ EOF
             ;;
 
         eliminar_mac_admin)
-            local mac=$1
+            local mac=$(echo "$1" | tr -d '[:space:]')
             grep -v "^$mac$" "$MAC_ADMIN_FILE" > "${MAC_ADMIN_FILE}.tmp"
             mv "${MAC_ADMIN_FILE}.tmp" "$MAC_ADMIN_FILE"
             chmod 666 "$MAC_ADMIN_FILE"
